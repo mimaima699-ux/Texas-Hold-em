@@ -1,0 +1,22 @@
+{
+  "name": "poker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "在线德州扑克：房间对战 + 中等策略 AI",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "test": "npm run test --workspace server",
+    "build": "npm run build --workspace client",
+    "start": "npm run start --workspace server",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

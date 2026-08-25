@@ -1,0 +1,14 @@
+# Render 部署配置（Blueprint）
+# 使用：render.com → New → Blueprint → 选择本仓库，即可自动创建服务
+services:
+  - type: web
+    name: poker
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
