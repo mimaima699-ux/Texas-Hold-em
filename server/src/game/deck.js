@@ -1,5 +1,5 @@
-// 牌与牌堆。牌用对象 { rank, suit } 表示：
-// rank: 2..14（11=J 12=Q 13=K 14=A），suit: 'c'|'d'|'h'|'s'
+// Cards and deck. A card is an object { rank, suit }:
+// rank: 2..14 (11=J 12=Q 13=K 14=A), suit: 'c'|'d'|'h'|'s'
 
 export const SUITS = ['c', 'd', 'h', 's']
 export const RANKS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
@@ -18,7 +18,7 @@ export function createDeck() {
   return deck
 }
 
-// Fisher–Yates 洗牌；rng 可注入以便测试
+// Fisher–Yates shuffle; rng is injectable for testing
 export function shuffle(deck, rng = Math.random) {
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))

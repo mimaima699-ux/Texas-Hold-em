@@ -1,7 +1,7 @@
-// 手牌评估器：给定 5~7 张牌，返回最优 5 张牌型。
-// 返回值 { score, category, tiebreak, name }，score 为可比较整数，越大越强。
+// Hand evaluator: given 5~7 cards, returns the best 5-card hand.
+// Returns { score, category, tiebreak, name }; score is a comparable integer, higher is stronger.
 
-// 牌型类别（由低到高）
+// Hand categories (low to high)
 export const CATEGORY = {
   HIGH_CARD: 0,
   ONE_PAIR: 1,
@@ -15,24 +15,24 @@ export const CATEGORY = {
 }
 
 export const CATEGORY_NAMES = {
-  [CATEGORY.HIGH_CARD]: '高牌',
-  [CATEGORY.ONE_PAIR]: '一对',
-  [CATEGORY.TWO_PAIR]: '两对',
-  [CATEGORY.THREE_OF_A_KIND]: '三条',
-  [CATEGORY.STRAIGHT]: '顺子',
-  [CATEGORY.FLUSH]: '同花',
-  [CATEGORY.FULL_HOUSE]: '葫芦',
-  [CATEGORY.FOUR_OF_A_KIND]: '四条',
-  [CATEGORY.STRAIGHT_FLUSH]: '同花顺',
+  [CATEGORY.HIGH_CARD]: 'High Card',
+  [CATEGORY.ONE_PAIR]: 'One Pair',
+  [CATEGORY.TWO_PAIR]: 'Two Pair',
+  [CATEGORY.THREE_OF_A_KIND]: 'Three of a Kind',
+  [CATEGORY.STRAIGHT]: 'Straight',
+  [CATEGORY.FLUSH]: 'Flush',
+  [CATEGORY.FULL_HOUSE]: 'Full House',
+  [CATEGORY.FOUR_OF_A_KIND]: 'Four of a Kind',
+  [CATEGORY.STRAIGHT_FLUSH]: 'Straight Flush',
 }
 
-// 判断一组（去重后的）点数是否能组成顺子；返回顺子的最大点数，或 null。
-// 特殊处理 A-2-3-4-5（wheel），此时顺子高点为 5。
+// Decide whether a set of (deduplicated) ranks forms a straight; returns the
+// straight's high rank, or null. Handles the special A-2-3-4-5 wheel (high rank 5).
 function straightHigh(uniqueRanksDesc) {
   if (uniqueRanksDesc.length < 5) return null
-  // 普通顺子：首尾相差 4
+  // Regular straight: first and last differ by 4
   if (uniqueRanksDesc[0] - uniqueRanksDesc[4] === 4) return uniqueRanksDesc[0]
-  // wheel: A(14)-5-4-3-2
+  // Wheel: A(14)-5-4-3-2
   if (
     uniqueRanksDesc[0] === 14 &&
     uniqueRanksDesc[1] === 5 &&
@@ -45,16 +45,16 @@ function straightHigh(uniqueRanksDesc) {
   return null
 }
 
-// 评估恰好 5 张牌
+// Evaluate exactly 5 cards
 function evaluate5(cards) {
   const ranks = cards.map((c) => c.rank).sort((a, b) => b - a)
   const suits = cards.map((c) => c.suit)
   const isFlush = suits.every((s) => s === suits[0])
 
-  // 统计点数出现次数
+  // Count rank occurrences
   const counts = new Map()
   for (const r of ranks) counts.set(r, (counts.get(r) || 0) + 1)
-  // 按（次数降序，点数降序）排列分组
+  // Sort groups by (count desc, rank desc)
   const groups = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])
 
   const uniqueDesc = [...new Set(ranks)]
@@ -92,7 +92,8 @@ function evaluate5(cards) {
     tiebreak = ranks.slice()
   }
 
-  // 编码为可比较整数：category 占最高位，其后依次 5 个 kicker（基数 15 足够容纳 2..14）
+  // Encode as a comparable integer: category takes the highest position,
+  // followed by 5 kickers (base 15 is enough for ranks 2..14)
   let score = category
   for (let i = 0; i < 5; i++) {
     score = score * 15 + (tiebreak[i] ?? 0)
@@ -100,13 +101,13 @@ function evaluate5(cards) {
 
   const name =
     category === CATEGORY.STRAIGHT_FLUSH && straight === 14
-      ? '皇家同花顺'
+      ? 'Royal Flush'
       : CATEGORY_NAMES[category]
 
   return { score, category, tiebreak, name }
 }
 
-// 枚举 C(n, 5) 组合
+// Enumerate C(n, 5) combinations
 function combinations(arr, k) {
   const result = []
   const n = arr.length
@@ -123,7 +124,7 @@ function combinations(arr, k) {
   return result
 }
 
-// 评估 5~7 张牌，返回最优 5 张牌型
+// Evaluate 5~7 cards and return the best 5-card hand
 export function evaluate(cards) {
   if (cards.length === 5) return evaluate5(cards)
   const combos = combinations(cards, 5)
@@ -135,7 +136,7 @@ export function evaluate(cards) {
   return best
 }
 
-// 比较两副牌（各自 5~7 张），返回负数/0/正数
+// Compare two hands (each 5~7 cards); returns negative/zero/positive
 export function compare(a, b) {
   return evaluate(a).score - evaluate(b).score
 }

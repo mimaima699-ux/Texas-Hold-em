@@ -1,16 +1,16 @@
-// 全局常量与默认配置
+// Global constants and default configuration
 export const CONFIG = {
   PORT: Number(process.env.PORT) || 3001,
-  // 真人玩家每轮行动超时（毫秒）
+  // Action timeout for human players (ms)
   ACTION_TIMEOUT_MS: 30000,
-  // 玩家掉线后轮到其行动时的缩短超时（毫秒）
+  // Shortened timeout when the acting player has disconnected (ms)
   OFFLINE_ACTION_TIMEOUT_MS: 8000,
-  // AI 思考延迟范围（毫秒），让出手节奏更自然
+  // AI thinking delay range (ms) for a more natural pace
   AI_ACT_MIN_MS: 500,
   AI_ACT_MAX_MS: 2000,
-  // 一手结束后到下一手开始之间的展示时间（毫秒）
+  // Display time between end of a hand and the start of the next (ms)
   HAND_END_PAUSE_MS: 6000,
-  // 房间默认配置
+  // Default room settings
   DEFAULT_STARTING_CHIPS: 1000,
   DEFAULT_SMALL_BLIND: 5,
   DEFAULT_BIG_BLIND: 10,

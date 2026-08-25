@@ -1,6 +1,6 @@
 import { avatarFor } from '../lib.js'
 
-// 游戏大厅：展示房间码、座位，房主可添加 AI 并开始游戏。
+// Game lobby: shows the room code and seats; the host can add AI and start.
 export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
   const { room } = state
   const isHost = room.youId === room.hostId
@@ -14,7 +14,7 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
   return (
     <div className="screen lobby-screen">
       <div className="lobby-panel">
-        <h1>🐺 德州扑克 · 房间对战</h1>
+        <h1>🐺 Texas Hold'em · Room Battle</h1>
 
         <div className="room-share">
           <div className="room-code-big">{room.id}</div>
@@ -24,13 +24,15 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
               navigator.clipboard?.writeText(shareLink).catch(() => {})
             }}
           >
-            复制邀请链接
+            Copy invite link
           </button>
-          <p className="share-hint">把房间号或链接发给朋友，加入后一起玩（支持 2~9 人，可加 AI）</p>
+          <p className="share-hint">
+            Share the room code or link with friends (2~9 players, AI seats available)
+          </p>
         </div>
 
         <div className="lobby-info">
-          初始筹码 {room.startingChips.toLocaleString()} · 盲注 {room.smallBlind}/{room.bigBlind}
+          Starting stack {room.startingChips.toLocaleString()} · Blinds {room.smallBlind}/{room.bigBlind}
         </div>
 
         <div className="seat-grid">
@@ -43,17 +45,17 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
                   {p.isBot ? ' 🤖' : ''}
                 </span>
                 <span className="lobby-chips">💰 {p.chips.toLocaleString()}</span>
-                {!p.connected && !p.isBot ? <span className="lobby-offline">离线</span> : null}
-                {p.id === room.hostId ? <span className="lobby-host">房主</span> : null}
+                {!p.connected && !p.isBot ? <span className="lobby-offline">Offline</span> : null}
+                {p.id === room.hostId ? <span className="lobby-host">Host</span> : null}
                 {p.id === room.youId && p.chips === 0 ? (
                   <button className="mini-btn" onClick={onRebuy}>
-                    重新买入
+                    Rebuy
                   </button>
                 ) : null}
               </div>
             ) : (
               <div key={i} className="lobby-seat empty">
-                空位 {i + 1}
+                Empty seat {i + 1}
               </div>
             )
           )}
@@ -63,20 +65,20 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
           {isHost ? (
             <>
               <button className="btn btn-ghost" onClick={onAddBot} disabled={seated.length >= room.maxPlayers}>
-                添加 AI（{seated.length}/{room.maxPlayers}）
+                Add AI ({seated.length}/{room.maxPlayers})
               </button>
               <button className="btn btn-primary" onClick={onStart} disabled={!canStart}>
-                {canStart ? '开始游戏' : `至少 ${2 - eligible.length} 人才能开始`}
+                {canStart ? 'Start Game' : `Need ${2 - eligible.length} more player(s)`}
               </button>
             </>
           ) : (
-            <p className="share-hint">等待房主开始游戏…</p>
+            <p className="share-hint">Waiting for the host to start the game…</p>
           )}
         </div>
 
         {me && me.chips === 0 && !isHost ? (
           <button className="btn btn-ghost" onClick={onRebuy}>
-            重新买入 {room.startingChips.toLocaleString()}
+            Rebuy {room.startingChips.toLocaleString()}
           </button>
         ) : null}
       </div>

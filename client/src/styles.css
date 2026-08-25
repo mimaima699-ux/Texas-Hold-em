@@ -1,4 +1,4 @@
-/* 全局 */
+/* Global */
 :root {
   --bg: #0b1210;
   --felt-1: #1a6b4a;
@@ -46,7 +46,7 @@ body {
   flex-direction: column;
 }
 
-/* ==== 按钮 ==== */
+/* ==== Buttons ==== */
 .btn {
   border: none;
   border-radius: 10px;
@@ -96,7 +96,7 @@ body {
   cursor: pointer;
 }
 
-/* ==== 进入页 ==== */
+/* ==== Join screen ==== */
 .center-screen,
 .join-screen {
   align-items: center;
@@ -187,7 +187,7 @@ body {
   color: var(--muted);
 }
 
-/* ==== 大厅 ==== */
+/* ==== Lobby ==== */
 .lobby-screen {
   align-items: center;
   justify-content: center;
@@ -281,7 +281,7 @@ body {
   justify-content: center;
 }
 
-/* ==== 牌桌 ==== */
+/* ==== Table ==== */
 .top-bar {
   display: flex;
   align-items: center;
@@ -365,7 +365,7 @@ body {
   }
 }
 
-/* ==== 座位 ==== */
+/* ==== Seats ==== */
 .seat-slot {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -504,7 +504,7 @@ body {
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
 }
 
-/* ==== 等待区 ==== */
+/* ==== Bench ==== */
 .bench {
   position: absolute;
   left: 12px;
@@ -534,7 +534,7 @@ body {
   color: var(--gold);
 }
 
-/* ==== 扑克牌 ==== */
+/* ==== Cards ==== */
 .card {
   width: 44px;
   height: 62px;
@@ -582,7 +582,7 @@ body {
   opacity: 0.55;
 }
 
-/* ==== 操作栏 ==== */
+/* ==== Action bar ==== */
 .action-bar {
   flex: none;
   min-height: 86px;
@@ -660,7 +660,7 @@ body {
   font-weight: 700;
 }
 
-/* ==== 日志 ==== */
+/* ==== Log ==== */
 .log-panel {
   width: 250px;
   flex: none;
@@ -689,7 +689,7 @@ body {
   padding: 2px 0;
 }
 
-/* ==== 提示与遮罩 ==== */
+/* ==== Notices & overlays ==== */
 .toast {
   position: fixed;
   top: 14px;
@@ -720,7 +720,7 @@ body {
   font-size: 15px;
 }
 
-/* ==== 窄屏 ==== */
+/* ==== Narrow screens ==== */
 @media (max-width: 860px) {
   .log-panel {
     display: none;

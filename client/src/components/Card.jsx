@@ -1,6 +1,6 @@
 import { isRedSuit, rankText, SUIT_LABEL } from '../lib.js'
 
-// 单张扑克牌。card 为 null 或对象缺省时显示牌背。
+// A single playing card. A null/missing card renders the back.
 export default function Card({ card, size = 'md', dim = false }) {
   const cls = [
     'card',
@@ -11,7 +11,7 @@ export default function Card({ card, size = 'md', dim = false }) {
     .filter(Boolean)
     .join(' ')
 
-  if (!card) return <div className={cls} aria-label="牌背" />
+  if (!card) return <div className={cls} aria-label="face-down card" />
 
   return (
     <div className={cls} aria-label={`${rankText(card.rank)}${SUIT_LABEL[card.suit]}`}>

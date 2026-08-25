@@ -1,4 +1,5 @@
-// 服务器入口：Express（静态资源 + 房间列表接口）+ Socket.IO（对局实时通信）。
+// Server entry point: Express (static assets + room list API) + Socket.IO
+// (realtime game communication).
 
 import http from 'node:http'
 import path from 'node:path'
@@ -12,7 +13,7 @@ import { createRoom, getRoom, rooms } from './room.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 
-// 房间列表（供加入页展示）
+// Room list (shown on the join screen)
 app.get('/api/rooms', (_req, res) => {
   res.json(
     [...rooms.values()].map((r) => ({
@@ -27,7 +28,7 @@ app.get('/api/rooms', (_req, res) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
-// 若前端已构建（npm run build），直接托管
+// If the client has been built (npm run build), serve it directly
 const dist = path.resolve(__dirname, '../../client/dist')
 if (fs.existsSync(dist)) {
   app.use(express.static(dist))
@@ -43,11 +44,11 @@ const io = new Server(server, {
 
 io.on('connection', (socket) => {
   let room = null
-  // 当前连接绑定的玩家 id（加入房间后由 sockets 表给出）
+  // Player id bound to this connection (from the sockets table after joining)
   const me = () => (room ? room.sockets.get(socket.id) ?? null : null)
   const needRoom = (cb) => {
     if (!room) {
-      cb({ ok: false, error: '请先加入房间' })
+      cb({ ok: false, error: 'Join a room first' })
       return null
     }
     return room
@@ -62,7 +63,7 @@ io.on('connection', (socket) => {
 
   socket.on('room:join', ({ roomId, name, playerId } = {}, cb = () => {}) => {
     const target = getRoom(roomId)
-    if (!target) return cb({ ok: false, error: '房间不存在' })
+    if (!target) return cb({ ok: false, error: 'Room not found' })
     room?.removeSocket(socket.id)
     room = target
     room.attach(io)
@@ -96,5 +97,5 @@ io.on('connection', (socket) => {
 })
 
 server.listen(CONFIG.PORT, () => {
-  console.log(`德州扑克服务器已启动: http://localhost:${CONFIG.PORT}`)
+  console.log(`Texas Hold'em server running at http://localhost:${CONFIG.PORT}`)
 })

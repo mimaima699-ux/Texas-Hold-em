@@ -1,13 +1,14 @@
-// 底池与边池计算。
-// 输入 entries：每名玩家本手投入与摊牌信息
+// Pot and side pot calculation.
+// Input entries: each player's total investment this hand plus showdown info
 //   { playerId, committed, folded, handScore }
-// 输出：拆分的池子、以及每名玩家应赢得的筹码。
+// Output: the split pots, and the chips each player should be awarded.
 
 export function totalPot(entries) {
   return entries.reduce((sum, e) => sum + (e.committed || 0), 0)
 }
 
-// 按投入层级拆出主池 + 各边池，并把每层分给摊牌胜者（平局均分，余数给行动更早者）。
+// Split into main pot + side pots by commitment level, award each level to its
+// showdown winner (ties split evenly, remainder goes to the first winner).
 export function awardPots(entries) {
   const pots = []
   const awards = {}
@@ -27,7 +28,7 @@ export function awardPots(entries) {
     if (nonFolded.length === 1) {
       winners = [nonFolded[0].playerId]
     } else if (nonFolded.length === 0) {
-      // 理论上不会发生（总有至少一人未弃牌拿池），兜底跳过
+      // Should not happen (someone unfolded always takes the pot); skip as fallback
       pots.push({ amount: slice, winners: [] })
       continue
     } else {
@@ -41,7 +42,7 @@ export function awardPots(entries) {
 
     const share = Math.floor(slice / winners.length)
     for (const w of winners) awards[w] = (awards[w] || 0) + share
-    // 余数（1~2 筹码）给第一个胜者
+    // Remainder (1~2 chips) goes to the first winner
     const remainder = slice - share * winners.length
     if (remainder > 0 && winners.length > 0) awards[winners[0]] += remainder
   }

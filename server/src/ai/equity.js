@@ -1,8 +1,9 @@
-// AI 用到的牌力 / 胜率 / 听牌估算（近似，非精确蒙特卡洛）。
+// Hand strength / equity / draw estimation used by the AI
+// (approximations, not exact Monte Carlo).
 
 import { evaluate, CATEGORY } from '../game/handEvaluator.js'
 
-// 起手牌强度（0~1），粗略版
+// Preflop hand strength (0~1), rough version
 export function preflopStrength(c1, c2) {
   const r1 = c1.rank
   const r2 = c2.rank
@@ -12,7 +13,7 @@ export function preflopStrength(c1, c2) {
 
   let s
   if (r1 === r2) {
-    // 对子：22=0.6 → AA=0.98
+    // Pocket pair: 22=0.6 → AA=0.98
     s = 0.6 + ((r1 - 2) / 12) * 0.38
   } else {
     s = 0.28 + ((high - 2) / 12) * 0.4 + ((low - 2) / 12) * 0.08
@@ -26,7 +27,7 @@ export function preflopStrength(c1, c2) {
   return Math.max(0.05, Math.min(0.98, s))
 }
 
-// 已成型牌型的基准胜率（近似）
+// Baseline equity per made hand category (approximate)
 const CATEGORY_BASE = {
   [CATEGORY.HIGH_CARD]: 0.08,
   [CATEGORY.ONE_PAIR]: 0.32,
@@ -39,7 +40,7 @@ const CATEGORY_BASE = {
   [CATEGORY.STRAIGHT_FLUSH]: 0.99,
 }
 
-// 估算听牌 outs（同花听 + 顺子听）
+// Estimate draw outs (flush draw + straight draw)
 export function countOuts(hole, community) {
   const cards = [...hole, ...community]
   if (community.length === 0) return 0
@@ -47,12 +48,13 @@ export function countOuts(hole, community) {
   const ranks = new Set(cards.map((c) => c.rank))
   let outs = 0
 
-  // 同花听：某花色恰好 4 张 → 剩 9 张
+  // Flush draw: exactly 4 cards of a suit → 9 outs
   const suitCounts = {}
   for (const c of cards) suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1
   if (Object.values(suitCounts).some((n) => n === 4)) outs += 9
 
-  // 顺子听：枚举所有可能顺子的高点，缺 1 张即为听牌
+  // Straight draw: enumerate all possible straight high ranks;
+  // missing exactly 1 card counts as a draw
   const highs = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
   for (const high of highs) {
     const need = high === 5 ? [14, 2, 3, 4, 5] : [high - 4, high - 3, high - 2, high - 1, high]
@@ -66,7 +68,7 @@ export function countOuts(hole, community) {
   return Math.min(outs, 18)
 }
 
-// 估算当前胜率（0~1）
+// Estimate current equity (0~1)
 export function estimateEquity(hole, community) {
   const cards = [...hole, ...community]
   if (community.length === 0) return preflopStrength(hole[0], hole[1])

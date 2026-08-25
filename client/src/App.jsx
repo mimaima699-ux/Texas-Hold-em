@@ -33,21 +33,21 @@ export default function App() {
     if (msg) setNotice(msg)
   }, [])
 
-  // 通知条自动消失
+  // Auto-dismiss the notice bar
   useEffect(() => {
     if (!notice) return
     const id = setTimeout(() => setNotice(''), 4000)
     return () => clearTimeout(id)
   }, [notice])
 
-  // socket 生命周期：连接 / 重连 / 状态同步
+  // Socket lifecycle: connect / reconnect / state sync
   useEffect(() => {
     socket.on('connect', () => {
       setConnected(true)
       const s = sessionRef.current
       if (s) {
         socket.emit('room:join', { roomId: s.roomId, playerId: s.playerId, name: s.name }, (res) => {
-          if (!res?.ok) clearSession(res?.error || '房间已失效')
+          if (!res?.ok) clearSession(res?.error || 'Room no longer exists')
         })
       }
     })
@@ -64,7 +64,7 @@ export default function App() {
 
   const establish = useCallback((res, name) => {
     if (!res?.ok) {
-      setNotice(res?.error || '操作失败')
+      setNotice(res?.error || 'Something went wrong')
       return
     }
     const s = { roomId: res.roomId, playerId: res.playerId, name }
@@ -113,7 +113,7 @@ export default function App() {
     })
   }, [])
 
-  // ==== 渲染 ====
+  // ==== Rendering ====
 
   if (!session) {
     return <JoinScreen notice={notice} onCreate={createRoom} onJoin={joinRoom} />
@@ -123,7 +123,7 @@ export default function App() {
     return (
       <div className="screen center-screen">
         {notice ? <div className="notice">{notice}</div> : null}
-        <div className="loading">{connected ? '正在进入房间…' : '正在连接服务器…'}</div>
+        <div className="loading">{connected ? 'Entering room…' : 'Connecting to server…'}</div>
       </div>
     )
   }
@@ -140,7 +140,7 @@ export default function App() {
       {notice ? <div className="toast">{notice}</div> : null}
       {!connected ? (
         <div className="overlay">
-          <div className="overlay-box">⚠️ 连接已断开，正在重连…</div>
+          <div className="overlay-box">⚠️ Connection lost, reconnecting…</div>
         </div>
       ) : null}
     </>

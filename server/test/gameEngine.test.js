@@ -5,7 +5,7 @@ function makePlayers(n = 3) {
   return Array.from({ length: n }, (_, i) => ({
     id: `p${i}`,
     seat: i,
-    name: `玩家${i}`,
+    name: `Player${i + 1}`,
     chips: 1000,
     isBot: false,
   }))
@@ -17,12 +17,12 @@ function play(game, type, amount) {
 }
 
 describe('PokerGame', () => {
-  it('正确下盲注并确定行动顺序（3 人局）', () => {
+  it('posts blinds correctly and sets the action order (3 players)', () => {
     const game = new PokerGame({ players: makePlayers(3), smallBlind: 5, bigBlind: 10 })
     game.startHand()
 
     expect(game.phase).toBe('preflop')
-    // 庄家 seat0，小盲 seat1，大盲 seat2，枪口（先行动）seat0
+    // Dealer seat0, SB seat1, BB seat2, first to act (UTG) seat0
     expect(game.players[1].bet).toBe(5)
     expect(game.players[2].bet).toBe(10)
     expect(game.streetBet).toBe(10)
@@ -34,31 +34,31 @@ describe('PokerGame', () => {
     expect(legal.canRaise).toBe(true)
   })
 
-  it('全员弃牌时，最后一人直接赢得底池', () => {
+  it('last player standing takes the pot when everyone folds', () => {
     const game = new PokerGame({ players: makePlayers(3), smallBlind: 5, bigBlind: 10 })
     game.startHand()
-    play(game, 'fold') // p0 弃牌
-    play(game, 'fold') // p1（小盲）弃牌
+    play(game, 'fold') // p0 folds
+    play(game, 'fold') // p1 (SB) folds
     expect(game.phase).toBe('handEnd')
     expect(game.lastResult.uncontested).toBe(true)
     expect(game.lastResult.winners[0].id).toBe('p2')
-    expect(game.lastResult.awards.p2).toBe(15) // 5 + 10 盲注
+    expect(game.lastResult.awards.p2).toBe(15) // 5 + 10 blinds
   })
 
-  it('全程过牌到摊牌，筹码守恒且底池正确分配', () => {
+  it('checking through to showdown conserves chips and splits the pot correctly', () => {
     const game = new PokerGame({ players: makePlayers(3), smallBlind: 5, bigBlind: 10 })
     game.startHand()
 
-    // 翻牌前：p0 跟注，p1 补盲，p2 过牌
+    // Preflop: p0 calls, p1 completes, p2 checks
     play(game, 'call')
     play(game, 'call')
     play(game, 'check')
     expect(game.phase).toBe('flop')
 
-    // 翻牌后首个行动者是庄家左侧（p1）
+    // Post-flop first to act is left of the dealer (p1)
     expect(game.currentActor.id).toBe('p1')
 
-    // 翻牌/转牌/河牌全部过牌
+    // Check down flop/turn/river
     for (let i = 0; i < 3; i++) {
       play(game, 'check')
       play(game, 'check')
@@ -72,42 +72,42 @@ describe('PokerGame', () => {
     const totalAwarded = Object.values(game.lastResult.awards).reduce((s, v) => s + v, 0)
     expect(totalAwarded).toBe(30)
 
-    // 总筹码守恒
+    // Total chips conserved
     const totalChips = game.players.reduce((s, p) => s + p.chips, 0)
     expect(totalChips).toBe(3000)
   })
 
-  it('加注后重新开启行动，最小加注校验生效', () => {
+  it('a raise re-opens action and minimum raise is enforced', () => {
     const game = new PokerGame({ players: makePlayers(3), smallBlind: 5, bigBlind: 10 })
     game.startHand()
-    // p0 加注到 30
+    // p0 raises to 30
     play(game, 'raise', 30)
     expect(game.players[0].bet).toBe(30)
     expect(game.streetBet).toBe(30)
-    // 非法加注（低于最小加注）应被拒绝
+    // Illegal raise (below the minimum) must be rejected
     const r = game.act(game.currentActor.id, { type: 'raise', amount: 35 })
     expect(r.ok).toBe(false)
   })
 
-  it('短码全下产生边池且正确分配', () => {
+  it('short all-in creates side pots distributed correctly', () => {
     const players = [
-      { id: 'short', seat: 0, name: '短码', chips: 15, isBot: false },
-      { id: 'deep1', seat: 1, name: '深码1', chips: 1000, isBot: false },
-      { id: 'deep2', seat: 2, name: '深码2', chips: 1000, isBot: false },
+      { id: 'short', seat: 0, name: 'Short', chips: 15, isBot: false },
+      { id: 'deep1', seat: 1, name: 'Deep1', chips: 1000, isBot: false },
+      { id: 'deep2', seat: 2, name: 'Deep2', chips: 1000, isBot: false },
     ]
     const game = new PokerGame({ players, smallBlind: 5, bigBlind: 10 })
     game.startHand()
 
-    // 让短码全下、两个深码跟注，然后一路过牌到摊牌
-    // 庄家 seat0(short)，SB seat1，BB seat2，先行动 seat0(short)
-    play(game, 'raise', 15) // short 全下到 15
-    // seat1 跟注到 15
+    // Short shoves, both deep stacks call, then check down to showdown
+    // Dealer seat0 (short), SB seat1, BB seat2, first to act seat0 (short)
+    play(game, 'raise', 15) // short all-in to 15
+    // seat1 calls to 15
     play(game, 'call')
-    // seat2 跟注到 15（BB 已下 10，再补 5）
+    // seat2 calls to 15 (BB already posted 10, adds 5)
     play(game, 'call')
     expect(game.phase).toBe('flop')
 
-    // 两个深码一路过牌
+    // The two deep stacks check it down
     play(game, 'check')
     play(game, 'check')
     play(game, 'check')
@@ -116,52 +116,54 @@ describe('PokerGame', () => {
     play(game, 'check')
     expect(game.phase).toBe('handEnd')
 
-    // 主池 15*3=45，边池 0（三人等额），全部底池 45 只被一人拿走
+    // Main pot 15*3=45, no side pot (three equal amounts), the whole 45
+    // goes to a single winner
     const totalAwarded = Object.values(game.lastResult.awards).reduce((s, v) => s + v, 0)
     expect(totalAwarded).toBe(45)
   })
 
-  it('双方翻牌前即全下时自动发完公共牌摊牌（不卡死）', () => {
+  it('preflop all-in between both players runs out the board without stalling', () => {
     const game = new PokerGame({
       players: [
-        { id: 'a', seat: 0, name: '甲', chips: 1000, isBot: false },
-        { id: 'b', seat: 1, name: '乙', chips: 1000, isBot: false },
+        { id: 'a', seat: 0, name: 'A', chips: 1000, isBot: false },
+        { id: 'b', seat: 1, name: 'B', chips: 1000, isBot: false },
       ],
       smallBlind: 5,
       bigBlind: 10,
     })
     game.startHand()
-    // 单挑：庄家(甲)即小盲。甲全下，乙跟注全下 → 无人能行动，直接发完牌
+    // Heads-up: dealer (A) is the small blind. A shoves, B calls all-in
+    // → nobody can act, board runs out
     play(game, 'raise', 1000)
     play(game, 'call')
     expect(game.phase).toBe('handEnd')
     expect(game.community.length).toBe(5)
-    // 筹码守恒
+    // Chips conserved
     expect(game.players.reduce((s, p) => s + p.chips, 0)).toBe(2000)
     expect(game.lastResult.reveal.length).toBe(2)
   })
 
-  it('多人局其余人全下后不能加注，只能跟注或弃牌', () => {
+  it('cannot raise when all opponents are all-in; call or fold only', () => {
     const players = [
-      { id: 'p0', seat: 0, name: '甲', chips: 500, isBot: false },
-      { id: 'p1', seat: 1, name: '乙', chips: 500, isBot: false },
-      { id: 'p2', seat: 2, name: '丙', chips: 500, isBot: false },
+      { id: 'p0', seat: 0, name: 'A', chips: 500, isBot: false },
+      { id: 'p1', seat: 1, name: 'B', chips: 500, isBot: false },
+      { id: 'p2', seat: 2, name: 'C', chips: 500, isBot: false },
     ]
     const game = new PokerGame({ players, smallBlind: 5, bigBlind: 10 })
     game.startHand()
-    play(game, 'raise', 500) // p0 全下
-    play(game, 'call') // p1 全下跟注
-    // 只剩 p2，对手全部全下 → 不能加注
+    play(game, 'raise', 500) // p0 all-in
+    play(game, 'call') // p1 calls all-in
+    // Only p2 left, all opponents all-in → cannot raise
     const legal = game.getLegalActions('p2')
     expect(legal.canRaise).toBe(false)
     expect(legal.canCall).toBe(true)
-    play(game, 'call') // p2 也全下跟注
-    // 三人全下 → 自动发完公共牌摊牌
+    play(game, 'call') // p2 also calls all-in
+    // Three-way all-in → board runs out automatically
     expect(game.phase).toBe('handEnd')
     expect(game.community.length).toBe(5)
   })
 
-  it('initialDealerIndex 指定首手庄家', () => {
+  it('initialDealerIndex sets the first hand\'s dealer', () => {
     const game = new PokerGame({
       players: makePlayers(3),
       smallBlind: 5,
@@ -170,7 +172,7 @@ describe('PokerGame', () => {
     })
     game.startHand()
     expect(game.players[game.dealerIndex].id).toBe('p2')
-    // 庄家 seat2 → 小盲 seat0，大盲 seat1，翻牌前先行动 seat2
+    // Dealer seat2 → SB seat0, BB seat1, first to act preflop seat2
     expect(game.players[0].bet).toBe(5)
     expect(game.players[1].bet).toBe(10)
     expect(game.currentActor.id).toBe('p2')

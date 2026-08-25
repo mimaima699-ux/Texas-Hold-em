@@ -1,5 +1,6 @@
-// 德州扑克游戏状态机（服务器权威）。
-// 引擎只负责规则与状态推进；计时器、AI、广播由房间层驱动。
+// Texas Hold'em game state machine (server authoritative).
+// The engine only handles rules and state progression; timers, AI and
+// broadcasting are driven by the room layer.
 
 import { createDeck, shuffle } from './deck.js'
 import { evaluate } from './handEvaluator.js'
@@ -7,7 +8,8 @@ import { awardPots, totalPot } from './pot.js'
 
 export class PokerGame {
   // players: [{ id, seat, name, chips, isBot }]
-  // initialDealerIndex: 首手的庄家在 players 中的下标（省略时首手庄家为 0 号位）
+  // initialDealerIndex: index in players of the first hand's dealer
+  // (omitted means player 0 deals the first hand)
   constructor({ players, smallBlind, bigBlind, onResult, initialDealerIndex }) {
     this.players = players
       .map((p, i) => ({
@@ -19,22 +21,23 @@ export class PokerGame {
         hole: [],
         folded: false,
         allIn: false,
-        bet: 0, // 当前下注轮投入
-        committed: 0, // 本手总投入（用于边池）
-        acted: false, // 当前下注轮是否已行动
+        bet: 0, // invested in the current betting round
+        committed: 0, // total invested this hand (for side pots)
+        acted: false, // whether they have acted in the current betting round
       }))
       .sort((a, b) => a.seat - b.seat)
 
     this.smallBlind = smallBlind
     this.bigBlind = bigBlind
-    this.minRaise = bigBlind // 简化：最小加注幅度固定为大盲
+    this.minRaise = bigBlind // simplified: minimum raise size is fixed at one big blind
 
-    // -1 表示"下一手庄家为 0 号位"；房间层每手重建引擎时传入上一手的庄家实现轮转
+    // -1 means "next hand's dealer is player 0"; the room layer passes the
+    // previous hand's dealer each time it rebuilds the engine to keep rotation
     this.dealerIndex = initialDealerIndex == null ? -1 : initialDealerIndex - 1
     this.deck = []
     this.community = []
     this.phase = 'waiting'
-    this.streetBet = 0 // 当前下注轮的最高下注
+    this.streetBet = 0 // highest bet in the current betting round
     this.currentIndex = -1
     this.handNumber = 0
     this.lastResult = null
@@ -57,7 +60,8 @@ export class PokerGame {
     return (i + 1) % this.players.length
   }
 
-  // 从 startIndex 起，找下一个能行动的玩家（未弃牌且还有筹码）
+  // Starting from startIndex, find the next player who can act
+  // (not folded and still has chips)
   findNextActor(startIndex) {
     const n = this.players.length
     for (let k = 0; k < n; k++) {
@@ -68,7 +72,7 @@ export class PokerGame {
     return -1
   }
 
-  // ==== 开局 ====
+  // ==== Starting a hand ====
 
   startHand() {
     this.handNumber++
@@ -88,7 +92,7 @@ export class PokerGame {
       p.acted = false
     }
 
-    // 轮流发两张底牌
+    // Deal two hole cards each, one at a time
     for (let round = 0; round < 2; round++) {
       for (const p of this.players) p.hole.push(this.deck.pop())
     }
@@ -102,7 +106,7 @@ export class PokerGame {
     let sbIdx
     let bbIdx
     if (n === 2) {
-      // 单挑：庄家即小盲
+      // Heads-up: the dealer is the small blind
       sbIdx = this.dealerIndex
       bbIdx = this.nextIndex(sbIdx)
     } else {
@@ -132,7 +136,8 @@ export class PokerGame {
     for (const p of this.players) p.acted = false
     this.streetBet = Math.max(0, ...this.players.map((p) => p.bet))
     const idx = this.findNextActor(firstIdx)
-    // 没人还能行动（其余全部全下）：直接发完公共牌摊牌，避免卡死
+    // Nobody can act anymore (everyone else is all-in): run out the board
+    // and go to showdown directly to avoid stalling
     if (idx === -1) {
       this.currentIndex = -1
       this.runOut()
@@ -141,16 +146,17 @@ export class PokerGame {
     this.currentIndex = idx
   }
 
-  // ==== 行动 ====
+  // ==== Actions ====
 
   getLegalActions(playerId) {
     const p = this.playerById(playerId)
     if (!p) return null
     const toCall = Math.max(0, this.streetBet - p.bet)
     const canCheck = toCall === 0
-    const callAmount = Math.min(toCall, p.chips) // 若筹码不足则为全下跟注
+    const callAmount = Math.min(toCall, p.chips) // short call becomes an all-in call
     const allInTo = p.bet + p.chips
-    // 只有还存在能响应加注的对手（未弃牌且有筹码）时，加注才有意义
+    // Raising is only meaningful when an opponent can still respond
+    // (not folded and has chips)
     const hasResponsiveOpponent = this.players.some((q) => q.id !== p.id && !q.folded && q.chips > 0)
     return {
       fold: true,
@@ -176,7 +182,7 @@ export class PokerGame {
   act(playerId, action) {
     const p = this.playerById(playerId)
     if (!p || this.currentActor?.id !== playerId) {
-      return { ok: false, error: '还轮不到你行动' }
+      return { ok: false, error: 'Not your turn to act' }
     }
     const legal = this.getLegalActions(playerId)
 
@@ -186,11 +192,11 @@ export class PokerGame {
         p.acted = true
         break
       case 'check':
-        if (!legal.check) return { ok: false, error: '当前不能过牌' }
+        if (!legal.check) return { ok: false, error: 'Cannot check' }
         p.acted = true
         break
       case 'call': {
-        if (legal.toCall === 0) return { ok: false, error: '当前无注可跟' }
+        if (legal.toCall === 0) return { ok: false, error: 'Nothing to call' }
         this.commit(p, legal.call)
         p.acted = true
         break
@@ -198,25 +204,25 @@ export class PokerGame {
       case 'raise': {
         const target = action.amount
         if (typeof target !== 'number' || target < legal.raiseMin || target > legal.raiseMax) {
-          return { ok: false, error: '加注额度不合法' }
+          return { ok: false, error: 'Invalid raise amount' }
         }
         this.commit(p, target - p.bet)
         p.acted = true
-        // 有人加注，其余可行动玩家需要重新决策
+        // A raise re-opens action for everyone else who can still act
         for (const q of this.players) {
           if (q.id !== p.id && !q.folded && q.chips > 0) q.acted = false
         }
         break
       }
       default:
-        return { ok: false, error: '未知操作' }
+        return { ok: false, error: 'Unknown action' }
     }
 
     this.advance()
     return { ok: true }
   }
 
-  // ==== 状态推进 ====
+  // ==== State progression ====
 
   advance() {
     const active = this.activePlayers
@@ -230,7 +236,7 @@ export class PokerGame {
     }
     const next = this.findNextActor(this.currentIndex + 1)
     if (next === -1) {
-      // 无人能再行动（全下或弃牌），直接发完公共牌进入摊牌
+      // Nobody can act (all-in or folded); deal out the board and go to showdown
       this.runOut()
       return
     }
@@ -246,12 +252,12 @@ export class PokerGame {
   }
 
   dealCommunity(count) {
-    this.deck.pop() // 烧一张
+    this.deck.pop() // burn one card
     for (let i = 0; i < count; i++) this.community.push(this.deck.pop())
   }
 
   nextStreet() {
-    // 收起本轮下注
+    // Collect this round's bets
     for (const p of this.players) p.bet = 0
 
     if (this.phase === 'preflop') {
@@ -268,7 +274,7 @@ export class PokerGame {
       return
     }
 
-    // 翻牌后由庄家左侧第一个未弃牌玩家先行动
+    // Post-flop, first to act is the first unfolded player left of the dealer
     this.startBettingRound(this.dealerIndex + 1)
   }
 
@@ -332,7 +338,7 @@ export class PokerGame {
     this.onResult(this.lastResult)
   }
 
-  // ==== 序列化（个性化视图） ====
+  // ==== Serialization (personalized views) ====
 
   potForDisplay() {
     return this.players.reduce((s, p) => s + p.committed, 0)
@@ -370,11 +376,11 @@ export class PokerGame {
         if (p.id === playerId) {
           hole = p.hole
         } else if (isReveal && !p.folded) {
-          hole = p.hole // 摊牌时亮出进入摊牌玩家的牌
+          hole = p.hole // reveal showdown contestants' cards at showdown
         } else if (p.folded) {
           hole = []
         } else {
-          hole = [null, null] // 牌背
+          hole = [null, null] // card backs
         }
         return {
           id: p.id,

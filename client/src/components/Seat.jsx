@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Card from './Card.jsx'
 import { avatarFor, now } from '../lib.js'
 
-// 倒计时（毫秒），每 200ms 刷新一次
+// Countdown (milliseconds), refreshed every 200ms
 export function useCountdown(endsAt) {
   const [remaining, setRemaining] = useState(() => Math.max(0, endsAt - now()))
   useEffect(() => {
@@ -13,7 +13,8 @@ export function useCountdown(endsAt) {
   return remaining
 }
 
-// 桌上的一个座位。p 来自 game.players（hole 为 [null,null] 时表示牌背）。
+// One seat at the table. p comes from game.players
+// (hole of [null, null] means face-down cards).
 export default function Seat({ p, isDealer, isActor, isWinner, endsAt, duration }) {
   const hole = p.hole.length ? p.hole : null
 
@@ -43,10 +44,10 @@ export default function Seat({ p, isDealer, isActor, isWinner, endsAt, duration 
           ? hole.map((c, i) => <Card key={i} card={c} size="sm" dim={p.folded} />)
           : Array.from({ length: 2 }, (_, i) => <Card key={i} card={null} size="sm" dim />)}
       </div>
-      {p.allIn && !p.folded ? <span className="badge allin-badge">全下</span> : null}
-      {p.folded ? <span className="badge folded-badge">已弃牌</span> : null}
+      {p.allIn && !p.folded ? <span className="badge allin-badge">All-in</span> : null}
+      {p.folded ? <span className="badge folded-badge">Folded</span> : null}
       {p.handName && !p.folded ? <span className="badge hand-badge">{p.handName}</span> : null}
-      {isDealer ? <span className="dealer-btn" title="庄家">D</span> : null}
+      {isDealer ? <span className="dealer-btn" title="Dealer">D</span> : null}
     </div>
   )
 }

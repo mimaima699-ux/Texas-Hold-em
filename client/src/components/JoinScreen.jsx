@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-// 进入页：输入昵称，创建或加入房间。
+// Entry screen: enter a nickname, then create or join a room.
 export default function JoinScreen({ notice, onCreate, onJoin }) {
   const [name, setName] = useState(() => localStorage.getItem('poker:name') || '')
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('r')?.toUpperCase() || '')
@@ -40,49 +40,49 @@ export default function JoinScreen({ notice, onCreate, onJoin }) {
   return (
     <div className="screen join-screen">
       <div className="join-panel">
-        <h1>🐺 德州扑克</h1>
-        <p className="tagline">房间对战 · 中等策略 AI · 边池规则完整</p>
+        <h1>🐺 Texas Hold'em</h1>
+        <p className="tagline">Room battles · medium-strategy AI · full side-pot rules</p>
 
         {notice ? <div className="notice">{notice}</div> : null}
 
         <form className="join-form" onSubmit={submitJoin}>
           <label>
-            昵称
+            Nickname
             <input
               value={name}
               onChange={(e) => saveName(e.target.value)}
-              placeholder="你的名字"
+              placeholder="your name"
               maxLength={12}
               autoFocus
             />
           </label>
           <label>
-            房间号
+            Room code
             <input
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="如 ABCD"
+              placeholder="e.g. ABCD"
               maxLength={4}
             />
           </label>
           <div className="join-buttons">
             <button className="btn btn-primary" type="submit" disabled={!name.trim() || !code.trim()}>
-              加入房间
+              Join Room
             </button>
             <button className="btn btn-ghost" onClick={submitCreate} disabled={!name.trim()} type="button">
-              创建房间
+              Create Room
             </button>
           </div>
         </form>
 
         {rooms.length > 0 ? (
           <div className="room-list">
-            <div className="room-list-title">开放中的房间</div>
+            <div className="room-list-title">Open rooms</div>
             {rooms.map((r) => (
-              <button key={r.id} className="room-list-item" onClick={() => onJoin(name.trim() || '玩家', r.id)}>
+              <button key={r.id} className="room-list-item" onClick={() => onJoin(name.trim() || 'Player', r.id)}>
                 <b>{r.id}</b>
                 <span>
-                  {r.players}/{r.max} 人 · {r.phase === 'playing' ? '游戏中' : '等待中'}
+                  {r.players}/{r.max} players · {r.phase === 'playing' ? 'in game' : 'waiting'}
                 </span>
               </button>
             ))}

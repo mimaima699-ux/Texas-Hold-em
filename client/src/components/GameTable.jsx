@@ -4,13 +4,13 @@ import Card from './Card.jsx'
 import ActionBar from './ActionBar.jsx'
 import { PHASE_NAMES, tableLayout } from '../lib.js'
 
-// 对局主界面：牌桌 + 座位 + 公共牌 + 操作栏 + 日志。
+// Main game screen: table + seats + community cards + action bar + log.
 export default function GameTable({ state, onAction, onRebuy }) {
   const { room, game } = state
   const youId = room.youId
   const players = game?.players ?? []
 
-  // 把自己转到正下方，其余按座位顺时针排布
+  // Rotate "you" to the bottom seat; others follow in seat order
   const youIdx = players.findIndex((p) => p.id === youId)
   const ordered = youIdx > 0 ? [...players.slice(youIdx), ...players.slice(0, youIdx)] : players
   const layout = tableLayout(ordered.length || 1)
@@ -19,20 +19,20 @@ export default function GameTable({ state, onAction, onRebuy }) {
   const winners = game?.phase === 'handEnd' ? new Set(game.lastResult.winners.map((w) => w.id)) : new Set()
   const result = game?.phase === 'handEnd' ? game.lastResult : null
 
-  // 不在本手的玩家（破产 / 掉线），显示在等待区
+  // Players not in the current hand (busted / offline) shown in the bench area
   const inHandIds = new Set(players.map((p) => p.id))
   const bench = room.seats.filter(Boolean).filter((p) => !inHandIds.has(p.id))
 
   return (
     <div className="screen game-screen">
       <header className="top-bar">
-        <span className="brand">🐺 德州扑克</span>
+        <span className="brand">🐺 Texas Hold'em</span>
         <span className="room-code">
-          房间 <b>{room.id}</b>
+          Room <b>{room.id}</b>
         </span>
-        <span className="hand-no">{game ? `第 ${game.handNumber} 手` : ''}</span>
+        <span className="hand-no">{game ? `Hand #${game.handNumber}` : ''}</span>
         <span className="blinds">
-          盲注 {room.smallBlind}/{room.bigBlind}
+          Blinds {room.smallBlind}/{room.bigBlind}
         </span>
         <span className="phase">{game ? PHASE_NAMES[game.phase] ?? game.phase : ''}</span>
       </header>
@@ -40,7 +40,7 @@ export default function GameTable({ state, onAction, onRebuy }) {
       <div className="game-body">
         <div className="table-wrap">
           <div className="felt">
-            <div className="pot">底池 {game?.pot ?? 0}</div>
+            <div className="pot">Pot {game?.pot ?? 0}</div>
             <div className="community">
               {Array.from({ length: 5 }, (_, i) => (
                 <Card key={i} card={game?.community[i] ?? null} />
@@ -71,13 +71,13 @@ export default function GameTable({ state, onAction, onRebuy }) {
 
           {bench.length > 0 ? (
             <div className="bench">
-              <span className="bench-title">等待下一手：</span>
+              <span className="bench-title">Waiting for next hand:</span>
               {bench.map((p) => (
                 <span key={p.id} className={`bench-player ${p.id === youId ? 'me' : ''}`}>
-                  {p.name}（{p.chips}）
+                  {p.name} ({p.chips})
                   {p.id === youId && p.chips === 0 ? (
                     <button className="mini-btn" onClick={onRebuy}>
-                      重新买入
+                      Rebuy
                     </button>
                   ) : null}
                 </span>
@@ -102,7 +102,7 @@ export default function GameTable({ state, onAction, onRebuy }) {
 }
 
 function ResultBanner({ result }) {
-  const text = result.winners.map((w) => `${w.name} 赢得 ${w.amount}`).join('，')
+  const text = result.winners.map((w) => `${w.name} wins ${w.amount}`).join(', ')
   return <div className="result-banner">🎉 {text}</div>
 }
 
@@ -113,7 +113,7 @@ function LogPanel({ log }) {
   }, [log.length])
   return (
     <aside className="log-panel">
-      <div className="log-title">牌局记录</div>
+      <div className="log-title">Game Log</div>
       <div className="log-list" ref={ref}>
         {log.map((e, i) => (
           <div key={i} className="log-entry">

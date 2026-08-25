@@ -2,7 +2,7 @@
   "name": "poker",
   "private": true,
   "version": "1.0.0",
-  "description": "在线德州扑克：房间对战 + 中等策略 AI",
+  "description": "Online Texas Hold'em: room battles + medium-strategy AI",
   "workspaces": [
     "server",
     "client"

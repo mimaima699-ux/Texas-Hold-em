@@ -1,7 +1,7 @@
-// 中等策略 AI 决策。
-// 输入上下文（由房间层提供）：
+// Medium-strategy AI decision making.
+// Input context (provided by the room layer):
 //   { hole, community, toCall, currentBet, potSize, legal, position, bigBlind, rng }
-// 输出：{ type: 'fold'|'check'|'call'|'raise', amount? }
+// Output: { type: 'fold'|'check'|'call'|'raise', amount? }
 
 import { preflopStrength, estimateEquity, countOuts } from './equity.js'
 
@@ -12,7 +12,7 @@ export function decide(ctx) {
   return community.length === 0 ? decidePreflop(ctx) : decidePostflop(ctx)
 }
 
-// 构造一个合法的加注（目标总下注额），夹在 [raiseMin, raiseMax] 之间
+// Build a legal raise (target total bet), clamped into [raiseMin, raiseMax]
 function raiseTo(ctx, desiredTotal) {
   const { legal } = ctx
   return { type: 'raise', amount: Math.round(clamp(desiredTotal, legal.raiseMin, legal.raiseMax)) }
@@ -24,7 +24,7 @@ function decidePreflop(ctx) {
   const posBonus = position * 0.12
 
   if (toCall === 0) {
-    // 无人下注，可以过牌
+    // No bet to call, checking is free
     if (strength > 0.55 + posBonus && legal.canRaise) {
       const total = currentBet + Math.round(bigBlind * (2.5 + rng() * 0.5))
       return raiseTo(ctx, total)
@@ -35,16 +35,16 @@ function decidePreflop(ctx) {
     return { type: 'check' }
   }
 
-  // 需要跟注
-  const required = 0.4 - posBonus // 跟注所需手牌强度阈值
+  // Facing a bet
+  const required = 0.4 - posBonus // hand strength threshold to call
   if (strength > required + 0.25 && legal.canRaise) {
-    // 强牌 3-bet
+    // Strong hand: 3-bet
     return raiseTo(ctx, currentBet + toCall + Math.round(Math.max(bigBlind * 2, toCall * 2)))
   }
   if (strength > required) {
     return { type: 'call' }
   }
-  // 弱牌，位置好时偶尔诈唬
+  // Weak hand: occasionally bluff from late position
   if (position > 0.6 && rng() < 0.06 && legal.canRaise) {
     return raiseTo(ctx, currentBet + toCall + Math.round(toCall * 1.5 + bigBlind))
   }
@@ -63,31 +63,31 @@ function decidePostflop(ctx) {
 
   if (toCall === 0) {
     if (strong && legal.canRaise) {
-      // 价值下注 60~75% 底池
+      // Value bet 60~75% of the pot
       return raiseTo(ctx, currentBet + Math.round(potSize * (0.6 + rng() * 0.15)))
     }
     if (medium && outs >= 4 && rng() < 0.5 && legal.canRaise) {
-      // 半诈唬（成牌中等 + 听牌）
+      // Semi-bluff (medium made hand + draw)
       return raiseTo(ctx, currentBet + Math.round(potSize * (0.5 + rng() * 0.16)))
     }
     if (weak && position > 0.6 && rng() < 0.1 && legal.canRaise) {
-      // 纯诈唬
+      // Pure bluff
       return raiseTo(ctx, currentBet + Math.round(potSize * (0.5 + rng() * 0.25)))
     }
     return { type: 'check' }
   }
 
   if (potOdds < equity) {
-    // 赔率合适，值得继续
+    // Favorable odds, worth continuing
     if (strong && rng() < 0.4 && legal.canRaise) {
       return raiseTo(ctx, currentBet + toCall + Math.round(potSize * 0.6))
     }
     return { type: 'call' }
   }
 
-  // 赔率不合适
+  // Unfavorable odds
   if (outs >= 8 && rng() < 0.2 && legal.canRaise) {
-    // 强听牌偶尔半诈唬加注
+    // Strong draw: occasionally raise as a semi-bluff
     return raiseTo(ctx, currentBet + toCall + Math.round(potSize * 0.6))
   }
   return { type: 'fold' }
