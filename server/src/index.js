@@ -54,9 +54,9 @@ io.on('connection', (socket) => {
     return room
   }
 
-  socket.on('room:create', ({ name } = {}, cb = () => {}) => {
+  socket.on('room:create', ({ name, startingChips, smallBlind, bigBlind } = {}, cb = () => {}) => {
     room?.removeSocket(socket.id)
-    room = createRoom()
+    room = createRoom({ startingChips, smallBlind, bigBlind })
     room.attach(io)
     cb({ ...room.join({ name, socketId: socket.id }), roomId: room.id })
   })
@@ -88,6 +88,11 @@ io.on('connection', (socket) => {
   socket.on('game:rebuy', (_data, cb = () => {}) => {
     const r = needRoom(cb)
     if (r) cb(r.rebuy(me()))
+  })
+
+  socket.on('game:reveal', (_data, cb = () => {}) => {
+    const r = needRoom(cb)
+    if (r) cb(r.reveal(me()))
   })
 
   socket.on('disconnect', () => {

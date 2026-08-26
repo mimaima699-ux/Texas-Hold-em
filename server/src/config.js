@@ -8,8 +8,9 @@ export const CONFIG = {
   // AI thinking delay range (ms) for a more natural pace
   AI_ACT_MIN_MS: 500,
   AI_ACT_MAX_MS: 2000,
-  // Display time between end of a hand and the start of the next (ms)
-  HAND_END_PAUSE_MS: 6000,
+  // Display time between end of a hand and the start of the next (ms).
+  // This is also the reveal window — players can choose to show their hand here.
+  HAND_END_PAUSE_MS: 8000,
   // Default room settings
   DEFAULT_STARTING_CHIPS: 1000,
   DEFAULT_SMALL_BLIND: 5,

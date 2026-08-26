@@ -31,6 +31,11 @@ export default function Seat({ p, isDealer, isActor, isWinner, endsAt, duration 
         .join(' ')}
     >
       {isActor && endsAt ? <SeatTimer endsAt={endsAt} duration={duration} /> : null}
+      {typeof p.wins === 'number' && p.wins > 0 ? (
+        <span className="wins-badge" title={`${p.wins} hand(s) won`}>
+          🏆 {p.wins}
+        </span>
+      ) : null}
       <div className="seat-head">
         <span className="seat-avatar">{avatarFor(p.name)}</span>
         <span className="seat-name">

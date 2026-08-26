@@ -140,3 +140,16 @@ export function evaluate(cards) {
 export function compare(a, b) {
   return evaluate(a).score - evaluate(b).score
 }
+
+// Current best hand name for a player's hole cards + the community cards.
+// Handles the 2-card preflop case (only a pair or high card is possible).
+export function currentHandName(hole, community) {
+  if (!hole || hole.length < 2) return null
+  const cards = [...hole, ...community]
+  if (cards.length < 5) {
+    return hole[0].rank === hole[1].rank
+      ? CATEGORY_NAMES[CATEGORY.ONE_PAIR]
+      : CATEGORY_NAMES[CATEGORY.HIGH_CARD]
+  }
+  return evaluate(cards).name
+}

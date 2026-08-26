@@ -86,6 +86,12 @@ body {
   background: linear-gradient(180deg, #f7cf5e, #e0a52e);
   color: #3a2a05;
 }
+.btn-reveal {
+  background: linear-gradient(180deg, #9a7cff, #6d4fe0);
+}
+.reveal-bar {
+  gap: 14px;
+}
 .mini-btn {
   border: 1px solid var(--gold);
   background: transparent;
@@ -148,6 +154,32 @@ body {
 }
 .join-buttons .btn {
   flex: 1;
+}
+.settings-title {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 6px;
+  text-align: left;
+}
+.room-settings {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.room-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.room-settings input {
+  background: #0a1310;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 14px;
 }
 .room-list {
   margin-top: 20px;
@@ -460,6 +492,19 @@ body {
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.wins-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  background: rgba(245, 194, 66, 0.16);
+  border: 1px solid rgba(245, 194, 66, 0.35);
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 16px;
 }
 .seat-timer {
   position: absolute;

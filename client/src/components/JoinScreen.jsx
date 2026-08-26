@@ -5,6 +5,9 @@ export default function JoinScreen({ notice, onCreate, onJoin }) {
   const [name, setName] = useState(() => localStorage.getItem('poker:name') || '')
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('r')?.toUpperCase() || '')
   const [rooms, setRooms] = useState([])
+  const [chips, setChips] = useState('1000')
+  const [smallBlind, setSmallBlind] = useState('5')
+  const [bigBlind, setBigBlind] = useState('10')
 
   useEffect(() => {
     let alive = true
@@ -29,7 +32,11 @@ export default function JoinScreen({ notice, onCreate, onJoin }) {
   const submitCreate = (e) => {
     e.preventDefault()
     if (!name.trim()) return
-    onCreate(name.trim())
+    onCreate(name.trim(), {
+      startingChips: Number(chips) || undefined,
+      smallBlind: Number(smallBlind) || undefined,
+      bigBlind: Number(bigBlind) || undefined,
+    })
   }
   const submitJoin = (e) => {
     e.preventDefault()
@@ -65,6 +72,21 @@ export default function JoinScreen({ notice, onCreate, onJoin }) {
               maxLength={4}
             />
           </label>
+          <div className="settings-title">Room settings (for Create Room)</div>
+          <div className="room-settings">
+            <label>
+              Starting chips
+              <input type="number" min="100" step="50" value={chips} onChange={(e) => setChips(e.target.value)} />
+            </label>
+            <label>
+              Small blind
+              <input type="number" min="1" value={smallBlind} onChange={(e) => setSmallBlind(e.target.value)} />
+            </label>
+            <label>
+              Big blind
+              <input type="number" min="2" value={bigBlind} onChange={(e) => setBigBlind(e.target.value)} />
+            </label>
+          </div>
           <div className="join-buttons">
             <button className="btn btn-primary" type="submit" disabled={!name.trim() || !code.trim()}>
               Join Room

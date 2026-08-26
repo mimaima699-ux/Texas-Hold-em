@@ -35,6 +35,13 @@ export function getRoom(id) {
 
 const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1))
 
+// Coerce a value into an integer within [lo, hi], falling back when invalid
+const clampInt = (v, fallback, lo, hi) => {
+  const n = Math.round(Number(v))
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(lo, Math.min(hi, n))
+}
+
 export class Room {
   constructor(options = {}) {
     this.id = newRoomCode()
@@ -51,9 +58,12 @@ export class Room {
     this.handTimer = null
     this.turnEndsAt = null
     this.turnDurationMs = null
-    this.startingChips = options.startingChips ?? CONFIG.DEFAULT_STARTING_CHIPS
-    this.smallBlind = options.smallBlind ?? CONFIG.DEFAULT_SMALL_BLIND
-    this.bigBlind = options.bigBlind ?? CONFIG.DEFAULT_BIG_BLIND
+    this.revealed = new Set() // playerIds who chose to show their hand this hand
+    // Host-configured room settings, clamped to sane ranges
+    this.startingChips = clampInt(options.startingChips, CONFIG.DEFAULT_STARTING_CHIPS, 100, 1_000_000)
+    this.smallBlind = clampInt(options.smallBlind, CONFIG.DEFAULT_SMALL_BLIND, 1, 100_000)
+    this.bigBlind = clampInt(options.bigBlind, CONFIG.DEFAULT_BIG_BLIND, 1, 200_000)
+    if (this.bigBlind <= this.smallBlind) this.bigBlind = this.smallBlind * 2
   }
 
   attach(io) {
@@ -89,6 +99,34 @@ export class Room {
   }
 
   stateFor(playerId) {
+    let game = null
+    if (this.engine && this.phase === 'playing') {
+      game = this.engine.serializeFor(playerId)
+      const epById = new Map(this.engine.players.map((p) => [p.id, p]))
+      const seatById = new Map(this.seats.filter(Boolean).map((p) => [p.id, p]))
+      const isHandEnd = this.engine.phase === 'handEnd'
+
+      for (const gp of game.players) {
+        gp.wins = seatById.get(gp.id)?.wins ?? 0
+        // Reveal: only show hole cards + hand name for players who opted in
+        if (isHandEnd && this.revealed.has(gp.id) && !gp.folded) {
+          const ep = epById.get(gp.id)
+          if (ep) {
+            gp.hole = ep.hole
+            gp.handName = ep.eval?.name ?? null
+          }
+        }
+        gp.revealed = this.revealed.has(gp.id)
+      }
+
+      game.revealWindow = isHandEnd
+      if (game.you) {
+        game.you.wins = seatById.get(game.you.id)?.wins ?? 0
+        game.you.canReveal = isHandEnd && !game.you.folded && !this.revealed.has(playerId)
+        game.you.revealed = this.revealed.has(playerId)
+      }
+    }
+
     return {
       room: {
         id: this.id,
@@ -106,6 +144,7 @@ export class Room {
             name: p.name,
             isBot: p.isBot,
             chips: p.chips,
+            wins: p.wins || 0,
             connected: p.socketId != null,
             isHost: p.id === this.hostId,
           }
@@ -114,7 +153,7 @@ export class Room {
         turnDurationMs: this.turnDurationMs,
         serverTime: Date.now(),
       },
-      game: this.engine && this.phase === 'playing' ? this.engine.serializeFor(playerId) : null,
+      game,
       log: this.log,
     }
   }
@@ -141,6 +180,7 @@ export class Room {
       isBot: false,
       chips: this.startingChips,
       socketId,
+      wins: 0,
     }
     this.seats[seat] = player
     this.sockets.set(socketId, player.id)
@@ -191,6 +231,7 @@ export class Room {
       isBot: true,
       chips: this.startingChips,
       socketId: null,
+      wins: 0,
     }
     this.addLog(`AI "${name}" joined the room`)
     this.broadcast()
@@ -208,6 +249,19 @@ export class Room {
     if (inHand && !inHand.folded) return { ok: false, error: 'Rebuy is available after this hand ends' }
     p.chips = this.startingChips
     this.addLog(`${p.name} rebought ${this.startingChips} chips`)
+    this.broadcast()
+    return { ok: true }
+  }
+
+  // Opt-in reveal: a contestant chooses to show their cards after the hand ends
+  reveal(playerId) {
+    if (this.phase !== 'playing' || !this.engine || this.engine.phase !== 'handEnd') {
+      return { ok: false, error: 'Reveal is only available right after a hand ends' }
+    }
+    const p = this.engine.playerById(playerId)
+    if (!p || p.folded) return { ok: false, error: 'You cannot reveal a folded hand' }
+    this.revealed.add(playerId)
+    this.addLog(`${p.name} shows their hand`)
     this.broadcast()
     return { ok: true }
   }
@@ -239,6 +293,7 @@ export class Room {
 
   startHand() {
     this.clearTimers()
+    this.revealed = new Set()
     const eligible = this.eligiblePlayers()
     if (this.phase !== 'playing' || eligible.length < CONFIG.MIN_PLAYERS) {
       this.endGame(eligible)
@@ -286,6 +341,11 @@ export class Room {
       if (seatP && seatP.id === ep.id) seatP.chips = ep.chips
     }
     const result = this.engine.lastResult
+    // Persist a win for each winner on their seat (shown as a hand counter)
+    for (const w of result.winners) {
+      const seatP = this.seats.find((s) => s && s.id === w.id)
+      if (seatP) seatP.wins = (seatP.wins || 0) + 1
+    }
     if (result.uncontested) {
       const w = result.winners[0]
       this.addLog(`Everyone else folded — ${w.name} wins ${w.amount}`)
@@ -366,22 +426,28 @@ export class Room {
       this.turnDurationMs = delay
       this.turnTimer = setTimeout(() => this.botAct(actor.id), delay)
     } else {
+      // Online status must come from the room's seat player (which carries
+      // socketId); the engine player is a stripped copy without that field.
+      const seatP = this.playerById(actor.id)
+      const online = !!seatP?.socketId
       const timeout =
-        timeoutOverrideMs ?? (actor.socketId == null ? CONFIG.OFFLINE_ACTION_TIMEOUT_MS : CONFIG.ACTION_TIMEOUT_MS)
+        timeoutOverrideMs ?? (online ? CONFIG.ACTION_TIMEOUT_MS : CONFIG.OFFLINE_ACTION_TIMEOUT_MS)
       this.turnEndsAt = Date.now() + timeout
       this.turnDurationMs = timeout
       this.turnTimer = setTimeout(() => this.autoAct(actor.id), timeout)
     }
   }
 
-  // Human timeout: check if possible, otherwise fold
+  // Human timeout → AI plays for them:
+  // someone ahead raised (can't check) → fold; otherwise (all checked) → check
   autoAct(playerId) {
     this.turnTimer = null
     if (!this.engine || this.engine.currentActor?.id !== playerId) return
     const legal = this.engine.getLegalActions(playerId)
     const p = this.engine.playerById(playerId)
-    const action = legal.check ? { type: 'check' } : { type: 'fold' }
-    this.addLog(`${p.name} timed out, auto-${legal.check ? 'checking' : 'folding'}`)
+    const facingRaise = !legal.check
+    const action = facingRaise ? { type: 'fold' } : { type: 'check' }
+    this.addLog(`${p.name} timed out — auto-${facingRaise ? 'folded (facing a raise)' : 'checked'}`)
     this.step(playerId, action)
   }
 

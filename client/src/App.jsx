@@ -74,9 +74,9 @@ export default function App() {
   }, [])
 
   const createRoom = useCallback(
-    (name) => {
+    (name, config) => {
       socket.connect()
-      socket.emit('room:create', { name }, (res) => establish(res, name))
+      socket.emit('room:create', { name, ...config }, (res) => establish(res, name))
     },
     [establish]
   )
@@ -113,6 +113,12 @@ export default function App() {
     })
   }, [])
 
+  const reveal = useCallback(() => {
+    socket.emit('game:reveal', {}, (res) => {
+      if (res && !res.ok) setNotice(res.error)
+    })
+  }, [])
+
   // ==== Rendering ====
 
   if (!session) {
@@ -133,7 +139,7 @@ export default function App() {
   return (
     <>
       {inGame ? (
-        <GameTable state={state} onAction={act} onRebuy={rebuy} />
+        <GameTable state={state} onAction={act} onRebuy={rebuy} onReveal={reveal} />
       ) : (
         <RoomLobby state={state} onStart={startGame} onAddBot={addBot} onRebuy={rebuy} />
       )}

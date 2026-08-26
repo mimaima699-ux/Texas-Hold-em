@@ -13,7 +13,7 @@
     "dev:client": "npm run dev --workspace client",
     "test": "npm run test --workspace server",
     "build": "npm run build --workspace client",
-    "start": "npm run start --workspace server",
+    "start": "npm run build && npm run start --workspace server",
     "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {

@@ -3,7 +3,7 @@
 // broadcasting are driven by the room layer.
 
 import { createDeck, shuffle } from './deck.js'
-import { evaluate } from './handEvaluator.js'
+import { evaluate, currentHandName } from './handEvaluator.js'
 import { awardPots, totalPot } from './pot.js'
 
 export class PokerGame {
@@ -311,12 +311,11 @@ export class PokerGame {
       winners: this.players
         .filter((p) => (awards[p.id] || 0) > 0)
         .map((p) => ({ id: p.id, name: p.name, amount: awards[p.id] })),
+      // handName only — actual cards stay hidden until a player opts to reveal
       reveal: contestants.map((p) => ({
         id: p.id,
         name: p.name,
-        hole: p.hole,
         handName: p.eval.name,
-        score: p.eval.score,
       })),
     }
     this.phase = 'handEnd'
@@ -326,6 +325,9 @@ export class PokerGame {
   endHandUncontested(winner) {
     const total = totalPot(this.players.map((p) => ({ committed: p.committed })))
     winner.chips += total
+    // Let the winner optionally show their hand during the reveal window
+    winner.eval =
+      this.community.length >= 3 ? evaluate([...winner.hole, ...this.community]) : null
     this.lastResult = {
       type: 'handEnd',
       uncontested: true,
@@ -346,7 +348,6 @@ export class PokerGame {
 
   serializeFor(playerId) {
     const you = this.playerById(playerId)
-    const isReveal = this.phase === 'handEnd' || this.phase === 'showdown'
     return {
       phase: this.phase,
       handNumber: this.handNumber,
@@ -369,18 +370,18 @@ export class PokerGame {
             bet: you.bet,
             toCall: Math.max(0, this.streetBet - you.bet),
             legal: this.getLegalActions(you.id),
+            handName: currentHandName(you.hole, this.community),
           }
         : null,
       players: this.players.map((p) => {
+        const isYou = p.id === playerId
         let hole
-        if (p.id === playerId) {
+        if (isYou) {
           hole = p.hole
-        } else if (isReveal && !p.folded) {
-          hole = p.hole // reveal showdown contestants' cards at showdown
         } else if (p.folded) {
           hole = []
         } else {
-          hole = [null, null] // card backs
+          hole = [null, null] // card backs; reveals are applied by the room layer
         }
         return {
           id: p.id,
@@ -394,7 +395,7 @@ export class PokerGame {
           committed: p.committed,
           hole,
           isDealer: this.players[this.dealerIndex]?.id === p.id,
-          handName: isReveal && !p.folded ? p.eval?.name ?? null : null,
+          handName: isYou ? currentHandName(p.hole, this.community) : null,
         }
       }),
       lastResult: this.lastResult,

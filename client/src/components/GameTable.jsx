@@ -5,7 +5,7 @@ import ActionBar from './ActionBar.jsx'
 import { PHASE_NAMES, tableLayout } from '../lib.js'
 
 // Main game screen: table + seats + community cards + action bar + log.
-export default function GameTable({ state, onAction, onRebuy }) {
+export default function GameTable({ state, onAction, onRebuy, onReveal }) {
   const { room, game } = state
   const youId = room.youId
   const players = game?.players ?? []
@@ -94,6 +94,7 @@ export default function GameTable({ state, onAction, onRebuy }) {
         bigBlind={room.bigBlind}
         smallBlind={room.smallBlind}
         onAction={onAction}
+        onReveal={onReveal}
         endsAt={room.turnEndsAt}
         duration={room.turnDurationMs}
       />

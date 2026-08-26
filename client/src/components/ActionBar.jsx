@@ -4,7 +4,7 @@ import { useCountdown } from './Seat.jsx'
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
 // Bottom action bar: shows Fold/Check/Call/Raise when it's your turn.
-export default function ActionBar({ game, bigBlind, smallBlind, onAction, endsAt, duration }) {
+export default function ActionBar({ game, bigBlind, smallBlind, onAction, onReveal, endsAt, duration }) {
   const you = game?.you
   const isMyTurn = !!you && game.currentTurn === you.id && game.phase !== 'handEnd'
 
@@ -14,6 +14,9 @@ export default function ActionBar({ game, bigBlind, smallBlind, onAction, endsAt
         <div className="action-hint">Spectating · joining next hand</div>
       </div>
     )
+  }
+  if (game.phase === 'handEnd') {
+    return <RevealBar you={you} onReveal={onReveal} />
   }
   if (you.folded) {
     return (
@@ -40,6 +43,38 @@ export default function ActionBar({ game, bigBlind, smallBlind, onAction, endsAt
       endsAt={endsAt}
       duration={duration}
     />
+  )
+}
+
+function RevealBar({ you, onReveal }) {
+  if (you.folded) {
+    return (
+      <div className="action-bar">
+        <div className="action-hint">Hand over — you folded this hand</div>
+      </div>
+    )
+  }
+  if (you.canReveal) {
+    return (
+      <div className="action-bar reveal-bar">
+        <button className="btn btn-reveal" onClick={onReveal}>
+          👀 Show my hand
+        </button>
+        <span className="action-hint">Next hand starts soon…</span>
+      </div>
+    )
+  }
+  if (you.revealed) {
+    return (
+      <div className="action-bar">
+        <div className="action-hint">You showed your hand</div>
+      </div>
+    )
+  }
+  return (
+    <div className="action-bar">
+      <div className="action-hint">Hand over — waiting for the next hand…</div>
+    </div>
   )
 }
 
