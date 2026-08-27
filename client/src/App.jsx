@@ -56,6 +56,7 @@ export default function App() {
       syncClock(s?.room?.serverTime)
       setState(s)
     })
+    socket.on('room:closed', ({ reason } = {}) => clearSession(reason || 'Room closed'))
     if (sessionRef.current) socket.connect()
     return () => {
       socket.off()
@@ -119,6 +120,12 @@ export default function App() {
     })
   }, [])
 
+  const sendChat = useCallback((text) => {
+    socket.emit('chat:send', { text }, (res) => {
+      if (res && !res.ok) setNotice(res.error)
+    })
+  }, [])
+
   // ==== Rendering ====
 
   if (!session) {
@@ -139,9 +146,9 @@ export default function App() {
   return (
     <>
       {inGame ? (
-        <GameTable state={state} onAction={act} onRebuy={rebuy} onReveal={reveal} />
+        <GameTable state={state} onAction={act} onRebuy={rebuy} onReveal={reveal} onChat={sendChat} />
       ) : (
-        <RoomLobby state={state} onStart={startGame} onAddBot={addBot} onRebuy={rebuy} />
+        <RoomLobby state={state} onStart={startGame} onAddBot={addBot} onRebuy={rebuy} onChat={sendChat} />
       )}
       {notice ? <div className="toast">{notice}</div> : null}
       {!connected ? (

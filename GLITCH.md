@@ -1,48 +1,64 @@
-# 部署到 Glitch（免费云托管）
+# Deploying to Glitch (free cloud hosting)
 
-## 为什么选 Glitch
+## Why Glitch
 
-这个游戏是 **Node.js + Socket.IO（WebSocket 长连接）**，需要一台能跑**常驻 Node 进程**的服务器。
-Glitch 正好满足：
+This game is built on **Node.js + Socket.IO (WebSocket long connections)**, so it
+needs a server that can run a **persistent Node process**. Glitch fits the bill:
 
-- 免费、**无需信用卡**
-- 支持 WebSocket
-- 给你一个永久网址 `https://<项目名>.glitch.me`（会休眠，见下方注意）
+- Free, **no credit card required**
+- Supports WebSockets
+- Gives you a permanent URL `https://<project-name>.glitch.me` (it will go to
+  sleep — see the notes below)
 
-## 第一步：把代码放到 Git 仓库
+## Step 1: Put the code in a Git repository
 
-Glitch 从 Git 仓库导入。国内访问 GitHub 慢的话，可以用 **Gitee（码云）** 代替。
+Glitch imports from a Git repository. If GitHub is slow from your region, you
+can use **Gitee** as an alternative.
 
-在 `poker` 目录里（确保 `.gitignore` 已排除 `node_modules`、`client/dist`）：
+From the `poker` directory (make sure `.gitignore` excludes `node_modules` and
+`client/dist`):
 
 ```bash
 git init
 git add .
 git commit -m "poker game"
-git remote add origin <你的仓库地址>
+git remote add origin <your-repo-url>
 git push -u origin main
 ```
 
-## 第二步：导入 Glitch
+## Step 2: Import into Glitch
 
-1. 打开 [glitch.com](https://glitch.com)，注册/登录（GitHub 或邮箱都行）
-2. 右上角 **New Project → Import from GitHub**
-3. 粘贴你的仓库地址（Gitee 的话在 Glitch 终端里 `git clone` 也行）
-4. Glitch 会自动识别为 Node 项目，执行 `npm install` + `npm start`
-   - 我们的 `npm start` 已配置为「先构建前端，再启动服务器」
-5. 等 1~2 分钟，点顶部 **Share**，拿到网址 `https://<项目名>.glitch.me`
+1. Open [glitch.com](https://glitch.com) and sign up / log in (GitHub or email
+   login both work)
+2. **New Project -> Import from GitHub**
+3. Paste your repository URL (for Gitee, you can also `git clone` directly from
+   the Glitch terminal)
+4. Glitch will auto-detect it as a Node project and run `npm install` +
+   `npm start`
+   - Our `npm start` is already configured to "build the frontend, then start
+     the server"
+5. After 1-2 minutes, click **Share** at the top to get
+   `https://<project-name>.glitch.me`
 
-## 没有 Git 仓库（手动上传）
+## No Git repository (manual upload)
 
-1. New Project → 选 **hello-node**
-2. 删掉默认文件，把项目文件（`package.json`、`server/`、`client/` 等，**不要上传 `node_modules`**）逐个上传 / 在左侧文件树新建并粘贴
-3. 在 Glitch 底部终端执行 `npm install`，然后点 **refresh**
+1. New Project -> choose **hello-node**
+2. Delete the default files and upload your project files one by one
+   (`package.json`, `server/`, `client/`, etc.) — **do not upload `node_modules`**.
+   You can also create them in the left file tree and paste the contents in.
+3. In the Glitch terminal at the bottom, run `npm install`, then click
+   **refresh**
 
-> 本地先跑一次 `npm run build`，把 `client/dist` 一起传上去，可以省去 Glitch 上的构建步骤。
+> Running `npm run build` locally first and uploading `client/dist` along with
+> everything else skips the build step on Glitch.
 
-## 注意事项
+## Notes
 
-- **休眠**：5 分钟没访问会休眠，下次访问等几十秒自动唤醒（页面会显示 reconnecting）
-- **房间是内存态**：服务重启后房间清空，需要重新建房
-- **端口不用管**：服务器已经读 `process.env.PORT`（Glitch 自动注入）
-- 免费额度对个人开黑完全够用
+- **Sleeping**: the project goes to sleep after 5 minutes without visits. The
+  next visit will take a few seconds to wake up (the page will show
+  "reconnecting").
+- **Rooms are in-memory**: rooms are cleared when the service restarts, so you
+  will need to create a new one.
+- **Port**: you don't need to worry about ports — the server already reads
+  `process.env.PORT` (which Glitch injects automatically).
+- The free tier is more than enough for personal play.

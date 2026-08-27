@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react'
 import Seat from './Seat.jsx'
 import Card from './Card.jsx'
 import ActionBar from './ActionBar.jsx'
+import ChatBox from './ChatBox.jsx'
 import { PHASE_NAMES, tableLayout } from '../lib.js'
 
 // Main game screen: table + seats + community cards + action bar + log.
-export default function GameTable({ state, onAction, onRebuy, onReveal }) {
+export default function GameTable({ state, onAction, onRebuy, onReveal, onChat }) {
   const { room, game } = state
   const youId = room.youId
   const players = game?.players ?? []
@@ -98,6 +99,8 @@ export default function GameTable({ state, onAction, onRebuy, onReveal }) {
         endsAt={room.turnEndsAt}
         duration={room.turnDurationMs}
       />
+
+      <ChatBox chat={state.chat} onSend={onChat} />
     </div>
   )
 }

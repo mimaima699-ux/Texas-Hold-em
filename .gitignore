@@ -3,3 +3,9 @@ dist/
 *.log
 .DS_Store
 .env
+.env.local
+cloudflared.exe
+# Personal / local deployment config (do not commit credentials or hostnames)
+cloudflared-config.yml
+config.yml
+THAT

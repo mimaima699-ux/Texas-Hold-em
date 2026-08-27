@@ -1,0 +1,15 @@
+# Cloudflare Tunnel configuration example.
+# Copy this file to cloudflared-config.yml, fill in your own tunnel ID,
+# credentials-file path and hostname, then the start-cloudflared.bat launcher
+# will use it.
+#
+# NOTE: your real cloudflared-config.yml is gitignored so credentials and
+# hostnames never end up on GitHub.
+
+tunnel: YOUR-TUNNEL-ID
+credentials-file: PATH/TO/YOUR-TUNNEL-CREDENTIALS.json
+
+ingress:
+  - hostname: your-hostname.example.com
+    service: http://localhost:3001
+  - service: http_status:404

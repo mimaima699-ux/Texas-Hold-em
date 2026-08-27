@@ -9,6 +9,7 @@ import express from 'express'
 import { Server } from 'socket.io'
 import { CONFIG } from './config.js'
 import { createRoom, getRoom, rooms } from './room.js'
+import { initLlm } from './ai/llmPlayer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -95,6 +96,11 @@ io.on('connection', (socket) => {
     if (r) cb(r.reveal(me()))
   })
 
+  socket.on('chat:send', ({ text } = {}, cb = () => {}) => {
+    const r = needRoom(cb)
+    if (r) cb(r.sendChat(me(), text))
+  })
+
   socket.on('disconnect', () => {
     room?.removeSocket(socket.id)
     room = null
@@ -103,4 +109,6 @@ io.on('connection', (socket) => {
 
 server.listen(CONFIG.PORT, () => {
   console.log(`Texas Hold'em server running at http://localhost:${CONFIG.PORT}`)
+  // Probe the LLM endpoint (falls back to heuristic AI when unreachable)
+  initLlm()
 })

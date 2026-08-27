@@ -6,6 +6,7 @@
 import { randomUUID } from 'node:crypto'
 import { PokerGame } from './game/gameEngine.js'
 import { decide } from './ai/aiPlayer.js'
+import { llmDecide, llmEnabled } from './ai/llmPlayer.js'
 import { cardLabel } from './game/deck.js'
 import { CONFIG } from './config.js'
 
@@ -59,11 +60,30 @@ export class Room {
     this.turnEndsAt = null
     this.turnDurationMs = null
     this.revealed = new Set() // playerIds who chose to show their hand this hand
+    this.chat = [] // recent chat messages { id, name, text, t }
+    this.started = false // has a game ever been started in this room
     // Host-configured room settings, clamped to sane ranges
     this.startingChips = clampInt(options.startingChips, CONFIG.DEFAULT_STARTING_CHIPS, 100, 1_000_000)
     this.smallBlind = clampInt(options.smallBlind, CONFIG.DEFAULT_SMALL_BLIND, 1, 100_000)
     this.bigBlind = clampInt(options.bigBlind, CONFIG.DEFAULT_BIG_BLIND, 1, 200_000)
     if (this.bigBlind <= this.smallBlind) this.bigBlind = this.smallBlind * 2
+
+    // Auto-close this room if no game starts within the lobby expiry window
+    this.lobbyExpireTimer = setTimeout(() => this.expireLobby(), CONFIG.ROOM_LOBBY_EXPIRE_MS)
+  }
+
+  // Lobby rooms that never start a game are closed automatically;
+  // seated players are notified so the client can return to the join screen.
+  expireLobby() {
+    if (this.started || this.phase !== 'lobby') return
+    if (this.io) {
+      for (const socketId of this.sockets.keys()) {
+        this.io.to(socketId).emit('room:closed', {
+          reason: 'Room closed: no game started within the time limit',
+        })
+      }
+    }
+    this.destroy()
   }
 
   attach(io) {
@@ -155,6 +175,7 @@ export class Room {
       },
       game,
       log: this.log,
+      chat: this.chat.slice(-30),
     }
   }
 
@@ -204,7 +225,10 @@ export class Room {
         this.scheduleTurn(CONFIG.OFFLINE_ACTION_TIMEOUT_MS)
       }
     }
-    if (this.sockets.size === 0) {
+    // A room whose game already started dies with its last human; a room that
+    // never started survives until the lobby expiry deadline so a mere page
+    // refresh doesn't kill the invite link.
+    if (this.sockets.size === 0 && this.started) {
       this.destroy()
       return true
     }
@@ -266,8 +290,33 @@ export class Room {
     return { ok: true }
   }
 
+  // ==== Chat ====
+
+  sendChat(playerId, text) {
+    const p = this.playerById(playerId)
+    if (!p) return { ok: false, error: 'You are not seated' }
+    const now = Date.now()
+    if (now - (p.lastChatAt || 0) < CONFIG.CHAT_COOLDOWN_MS) {
+      return { ok: false, error: 'Sending messages too fast' }
+    }
+    const clean = String(text || '')
+      .replace(/[\u0000-\u001f]/g, ' ') // strip control chars
+      .trim()
+      .slice(0, CONFIG.CHAT_MAX_LEN)
+    if (!clean) return { ok: false, error: 'Empty message' }
+    p.lastChatAt = now
+    this.chat.push({ id: `${now}-${Math.random().toString(36).slice(2, 7)}`, name: p.name, text: clean, t: now })
+    if (this.chat.length > 50) this.chat.splice(0, this.chat.length - 50)
+    this.broadcast()
+    return { ok: true }
+  }
+
   destroy() {
     this.clearTimers()
+    if (this.lobbyExpireTimer) {
+      clearTimeout(this.lobbyExpireTimer)
+      this.lobbyExpireTimer = null
+    }
     this.phase = 'lobby'
     rooms.delete(this.id)
   }
@@ -277,6 +326,11 @@ export class Room {
   start(actorId) {
     if (actorId !== this.hostId) return { ok: false, error: 'Only the host can start the game' }
     if (this.phase === 'playing') return { ok: false, error: 'Game already in progress' }
+    this.started = true
+    if (this.lobbyExpireTimer) {
+      clearTimeout(this.lobbyExpireTimer)
+      this.lobbyExpireTimer = null
+    }
     // Starting a new game: reset every seat's chips to the starting stack
     // (the previous game's champion is already recorded in the log)
     for (const p of this.seatedPlayers()) p.chips = this.startingChips
@@ -421,10 +475,19 @@ export class Room {
     if (!actor) return
 
     if (actor.isBot) {
-      const delay = randInt(CONFIG.AI_ACT_MIN_MS, CONFIG.AI_ACT_MAX_MS)
-      this.turnEndsAt = Date.now() + delay
-      this.turnDurationMs = delay
-      this.turnTimer = setTimeout(() => this.botAct(actor.id), delay)
+      if (llmEnabled()) {
+        // LLM bot: trigger quickly, show a longer "thinking" window on the timer
+        const delay = randInt(CONFIG.AI_ACT_MIN_MS, CONFIG.AI_ACT_MAX_MS)
+        const window = Math.max(CONFIG.LLM_TURN_MS, delay + 1500)
+        this.turnEndsAt = Date.now() + window
+        this.turnDurationMs = window
+        this.turnTimer = setTimeout(() => this.botAct(actor.id), delay)
+      } else {
+        const delay = randInt(CONFIG.AI_ACT_MIN_MS, CONFIG.AI_ACT_MAX_MS)
+        this.turnEndsAt = Date.now() + delay
+        this.turnDurationMs = delay
+        this.turnTimer = setTimeout(() => this.botAct(actor.id), delay)
+      }
     } else {
       // Online status must come from the room's seat player (which carries
       // socketId); the engine player is a stripped copy without that field.
@@ -451,7 +514,20 @@ export class Room {
     this.step(playerId, action)
   }
 
-  botAct(botId) {
+  async botAct(botId) {
+    try {
+      await this.runBotAct(botId)
+    } catch (e) {
+      // Never let a bot crash the server; recover with check/fold if it's still our turn
+      console.error('[bot] botAct error:', e)
+      if (this.engine && this.phase === 'playing' && this.engine.currentActor?.id === botId) {
+        const legal = this.engine.getLegalActions(botId)
+        this.step(botId, legal?.check ? { type: 'check' } : { type: 'fold' })
+      }
+    }
+  }
+
+  async runBotAct(botId) {
     this.turnTimer = null
     if (!this.engine || this.engine.currentActor?.id !== botId) return
     const actor = this.engine.currentActor
@@ -463,7 +539,7 @@ export class Room {
     const dist = (players.indexOf(actor) - this.engine.dealerIndex + n) % n
     const position = n <= 1 ? 1 : ((dist - 1 + n) % n) / (n - 1)
 
-    const action = decide({
+    const ctx = {
       hole: actor.hole,
       community: this.engine.community,
       toCall: legal.toCall,
@@ -472,9 +548,25 @@ export class Room {
       legal,
       position,
       bigBlind: this.bigBlind,
+      smallBlind: this.smallBlind,
+      stack: actor.chips,
+      opponents: players
+        .filter((q) => q.id !== botId)
+        .map((q) => ({ name: q.name, stack: q.chips, bet: q.bet, folded: q.folded })),
       rng: Math.random,
-    })
+    }
 
+    // Ask the LLM first (if enabled); fall back to the heuristic AI
+    let action = await llmDecide(ctx)
+    const viaLlm = !!action
+    if (!action) action = decide(ctx)
+
+    // The hand may have moved on while awaiting the LLM — bail out if so
+    if (!this.engine || this.phase !== 'playing' || this.engine.phase === 'handEnd' || this.engine.currentActor?.id !== botId) {
+      return
+    }
+
+    console.log(`[bot] ${actor.name} ${action.type}${action.amount != null ? ` ${action.amount}` : ''}${viaLlm ? ' (LLM)' : ' (heuristic)'}`)
     let res = this.step(botId, action)
     if (!res.ok) {
       // Fallback if the decision was illegal

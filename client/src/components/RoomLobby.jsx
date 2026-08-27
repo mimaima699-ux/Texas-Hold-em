@@ -1,7 +1,41 @@
+import { useState } from 'react'
 import { avatarFor } from '../lib.js'
+import ChatBox from './ChatBox.jsx'
+
+// Canonical public URL — invite links always use the fixed domain,
+// no matter which address (tunnel / localhost) the page was opened from
+const PUBLIC_URL = 'https://texasholdem-mima.me'
+
+// Clipboard with fallback: the async Clipboard API only works in secure,
+// focused contexts on some browsers; the legacy execCommand path covers
+// the rest. Returns false when both fail (the link is shown for manual copy).
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    /* fall through to legacy path */
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
 
 // Game lobby: shows the room code and seats; the host can add AI and start.
-export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
+export default function RoomLobby({ state, onStart, onAddBot, onRebuy, onChat }) {
   const { room } = state
   const isHost = room.youId === room.hostId
   const seated = room.seats.filter(Boolean)
@@ -9,7 +43,14 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
   const canStart = eligible.length >= 2
   const me = seated.find((p) => p.id === room.youId)
 
-  const shareLink = `${location.origin}${location.pathname}?r=${room.id}`
+  const shareLink = `${PUBLIC_URL}/?r=${room.id}`
+  const [copyState, setCopyState] = useState('') // '' | 'ok' | 'fail'
+
+  const copyLink = async () => {
+    const ok = await copyText(shareLink)
+    setCopyState(ok ? 'ok' : 'fail')
+    setTimeout(() => setCopyState(''), 2500)
+  }
 
   return (
     <div className="screen lobby-screen">
@@ -18,14 +59,17 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
 
         <div className="room-share">
           <div className="room-code-big">{room.id}</div>
-          <button
-            className="btn btn-copy"
-            onClick={() => {
-              navigator.clipboard?.writeText(shareLink).catch(() => {})
-            }}
-          >
-            Copy invite link
+          <button className="btn btn-copy" onClick={copyLink}>
+            {copyState === 'ok' ? '✅ Copied!' : copyState === 'fail' ? '❌ Copy failed — select below' : 'Copy invite link'}
           </button>
+          {/* Always-visible link: click/tap to select, then copy manually */}
+          <input
+            className="share-link"
+            readOnly
+            value={shareLink}
+            onFocus={(e) => e.currentTarget.select()}
+            onClick={(e) => e.currentTarget.select()}
+          />
           <p className="share-hint">
             Share the room code or link with friends (2~9 players, AI seats available)
           </p>
@@ -82,6 +126,8 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy }) {
           </button>
         ) : null}
       </div>
+
+      <ChatBox chat={state.chat} onSend={onChat} defaultOpen />
     </div>
   )
 }
