@@ -10,9 +10,66 @@ import { llmDecide, llmEnabled } from './ai/llmPlayer.js'
 import { cardLabel } from './game/deck.js'
 import { CONFIG } from './config.js'
 
-// AI name pool (wolf-game themed)
-const BOT_NAMES = ['Big Bad Wolf', 'Little Red', 'Old Hunter', 'Bunny', 'Seer', 'Witch', 'Guard', 'Night Owl', 'Villager']
+// The eight AI personas (icon + name). Icons are reserved — players never get
+// them as avatars — and a persona's name becomes "<name> Jr." if a human takes
+// the same name.
+const AI_ROSTER = [
+  { icon: '🥕', name: 'Mima' },
+  { icon: '🦄', name: 'Hazeshade' },
+  { icon: '🐮', name: 'Reacher' },
+  { icon: '🐻', name: 'Jeremiah' },
+  { icon: '🐟', name: 'Luzi' },
+  { icon: '🌲', name: '42' },
+  { icon: '🍊', name: 'Orangeee' },
+  { icon: '🧠', name: 'Andy' },
+]
+
+// AI chatter, keyed by the persona's icon. Winners boast after each hand; a bot
+// that just busted out sends its farewell (losers stay quiet); and the champion
+// of a whole game leaves a final word.
+const AI_WIN = {
+  '🥕': "I'm a genius, what can I say? 🤓",
+  '🦄': "Too easy, HAHA🤣",
+  '🐮': "Am I good or what? 👐",
+  '🐻': "Let's gooo! 😄",
+  '🌲': "Smart, I know. 😎",
+  '🍊': "Yesss～😋",
+  '🧠': "nb👊",
+  '🐟': "Who else?👏",
+}
+const AI_BUST = {
+  '🥕': "Good guys always lose — so what's my excuse?",
+  '🦄': "Friendship is magic... but today the magic declared bankruptcy.",
+  '🐮': "I'd never believed in luck. Never had any cause to. And I was right.",
+  '🐻': "The highway goes on forever... but my chips ran out of gas.",
+  '🌲': "The answer is still 42. The question, apparently, was wrong.",
+  '🍊': "Rigged. The whole thing. Rigged.",
+  '🧠': "And Andy said, let there be... a break.",
+  '🐟': "The river folds. So do I. For good this time.",
+}
+const AI_CHAMPION = {
+  '🥕': "Mima never cheats — she just out-lucks the universe.",
+  '🦄': "The magic of friendship never folds — neither does Hazeshade.",
+  '🐮': "Reacher said nothing.",
+  '🐻': "Don't lose sight — the night is still young.",
+  '🌲': "The answer is 42.",
+  '🍊': "Orange skies and river runs — tonight she is the sun.",
+  '🧠': "And Andy said, let there be light.",
+  '🐟': "Even the river knows when to go all in.",
+}
+
+// Human player avatars (mirrored on the client). Drawn so no two seated humans
+// share the same icon even when their names collide.
+const HUMAN_AVATARS = ['🐺', '🦊', '🐼', '🦁', '🐸', '🦉', '🐵', '🐯', '🐰', '🦝', '🐨', '🐗', '🦔']
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+// Fresh opponent-tracking stats (see observeProfile). VPIP = hands where the
+// player voluntarily put money in preflop; PFR = raised preflop; fold-to-bet
+// feeds the AI's bluff (fold-equity) decisions.
+function newProfile() {
+  return { hands: 0, vpip: 0, pfr: 0, facedBet: 0, foldedToBet: 0 }
+}
 
 export const rooms = new Map()
 
@@ -48,6 +105,7 @@ export class Room {
     this.id = newRoomCode()
     this.seats = Array(CONFIG.MAX_PLAYERS).fill(null) // seat number -> player | null
     this.hostId = null
+    this.spectators = new Map() // socketId -> { id, name, socketId } (watching, not seated)
     this.phase = 'lobby' // lobby | playing
     this.engine = null // engine instance for the current hand (one per hand)
     this.io = null
@@ -62,11 +120,13 @@ export class Room {
     this.revealed = new Set() // playerIds who chose to show their hand this hand
     this.chat = [] // recent chat messages { id, name, text, t }
     this.started = false // has a game ever been started in this room
+    this.gameOver = null // settlement payload for the victory screen, set by endGame
     // Host-configured room settings, clamped to sane ranges
     this.startingChips = clampInt(options.startingChips, CONFIG.DEFAULT_STARTING_CHIPS, 100, 1_000_000)
     this.smallBlind = clampInt(options.smallBlind, CONFIG.DEFAULT_SMALL_BLIND, 1, 100_000)
     this.bigBlind = clampInt(options.bigBlind, CONFIG.DEFAULT_BIG_BLIND, 1, 200_000)
     if (this.bigBlind <= this.smallBlind) this.bigBlind = this.smallBlind * 2
+    this.maxRebuys = clampInt(options.rebuys, 0, 0, CONFIG.MAX_REBUYS)
 
     // Auto-close this room if no game starts within the lobby expiry window
     this.lobbyExpireTimer = setTimeout(() => this.expireLobby(), CONFIG.ROOM_LOBBY_EXPIRE_MS)
@@ -116,9 +176,13 @@ export class Room {
     for (const [socketId, playerId] of this.sockets) {
       this.io.to(socketId).emit('state', this.stateFor(playerId))
     }
+    for (const [socketId, spec] of this.spectators) {
+      this.io.to(socketId).emit('state', this.stateFor(spec.id))
+    }
   }
 
   stateFor(playerId) {
+    const isSpectator = [...this.spectators.values()].some((s) => s.id === playerId)
     let game = null
     if (this.engine && this.phase === 'playing') {
       game = this.engine.serializeFor(playerId)
@@ -127,9 +191,13 @@ export class Room {
       const isHandEnd = this.engine.phase === 'handEnd'
 
       for (const gp of game.players) {
-        gp.wins = seatById.get(gp.id)?.wins ?? 0
-        // Reveal: only show hole cards + hand name for players who opted in
-        if (isHandEnd && this.revealed.has(gp.id) && !gp.folded) {
+        const seatInfo = seatById.get(gp.id)
+        gp.wins = seatInfo?.wins ?? 0
+        gp.icon = seatInfo?.icon
+        gp.afk = !!seatInfo?.afk
+        // Reveal: show hole cards + hand name for players who opted in
+        // (AI seats are auto-revealed at hand end, folded or not)
+        if (isHandEnd && this.revealed.has(gp.id)) {
           const ep = epById.get(gp.id)
           if (ep) {
             gp.hole = ep.hole
@@ -141,7 +209,10 @@ export class Room {
 
       game.revealWindow = isHandEnd
       if (game.you) {
-        game.you.wins = seatById.get(game.you.id)?.wins ?? 0
+        const seatInfo = seatById.get(game.you.id)
+        game.you.wins = seatInfo?.wins ?? 0
+        game.you.afk = !!seatInfo?.afk
+        game.you.remainingRebuys = this.maxRebuys - (seatInfo?.rebuyCount || 0)
         game.you.canReveal = isHandEnd && !game.you.folded && !this.revealed.has(playerId)
         game.you.revealed = this.revealed.has(playerId)
       }
@@ -153,6 +224,9 @@ export class Room {
         phase: this.phase,
         hostId: this.hostId,
         youId: playerId,
+        youSpectating: isSpectator,
+        openSeats: this.seats.filter((s) => s === null).length,
+        maxRebuys: this.maxRebuys,
         startingChips: this.startingChips,
         smallBlind: this.smallBlind,
         bigBlind: this.bigBlind,
@@ -163,14 +237,18 @@ export class Room {
             id: p.id,
             name: p.name,
             isBot: p.isBot,
+            icon: p.icon,
             chips: p.chips,
             wins: p.wins || 0,
             connected: p.socketId != null,
+            afk: !!p.afk,
+            remainingRebuys: this.maxRebuys - (p.rebuyCount || 0),
             isHost: p.id === this.hostId,
           }
         ),
         turnEndsAt: this.turnEndsAt,
         turnDurationMs: this.turnDurationMs,
+        gameOver: this.gameOver,
         serverTime: Date.now(),
       },
       game,
@@ -182,36 +260,72 @@ export class Room {
   // ==== Player management ====
 
   join({ name, playerId, socketId }) {
+    const displayName = String(name || 'Player').slice(0, 12)
+
     // Reconnect: player still seated
     const existing = playerId ? this.playerById(playerId) : null
     if (existing) {
       existing.socketId = socketId
-      if (name) existing.name = String(name).slice(0, 12) || existing.name
+      if (name) existing.name = displayName || existing.name
       this.sockets.set(socketId, existing.id)
       this.addLog(`${existing.name} reconnected`)
       this.broadcast()
       return { ok: true, playerId: existing.id }
     }
+
+    // Reconnect (or refresh): spectator still watching
+    const existingSpec = playerId ? [...this.spectators.values()].find((s) => s.id === playerId) : null
+    if (existingSpec) {
+      existingSpec.socketId = socketId
+      if (name) existingSpec.name = displayName
+      this.spectators.set(socketId, existingSpec)
+      this.addLog(`${existingSpec.name} resumed spectating`)
+      this.broadcast()
+      return { ok: true, playerId: existingSpec.id, spectator: true }
+    }
+
     const seat = this.seats.findIndex((s) => s === null)
-    if (seat === -1) return { ok: false, error: 'Room is full' }
+    const midGame = this.started && this.phase === 'playing'
+    if (seat === -1 || midGame) {
+      // Spectator: room full, or the game is already running
+      const spec = { id: playerId || randomUUID(), name: displayName, socketId }
+      this.spectators.set(socketId, spec)
+      this.addLog(`${spec.name} is spectating`)
+      this.broadcast()
+      return { ok: true, playerId: spec.id, spectator: true }
+    }
+
     const player = {
       id: playerId || randomUUID(),
       seat,
-      name: String(name || 'Player').slice(0, 12),
+      name: displayName,
       isBot: false,
+      icon: this.pickAvatar(),
       chips: this.startingChips,
       socketId,
       wins: 0,
+      rebuyCount: 0,
+      profile: newProfile(),
+      _handVpip: false,
+      _handPfr: false,
+      _preflopRaised: false,
+      afk: false,
     }
     this.seats[seat] = player
     this.sockets.set(socketId, player.id)
     if (!this.hostId) this.hostId = player.id
+    this.renameCollidingBots(displayName)
     this.addLog(`${player.name} joined the room`)
     this.broadcast()
     return { ok: true, playerId: player.id }
   }
 
   removeSocket(socketId) {
+    if (this.spectators.has(socketId)) {
+      this.spectators.delete(socketId)
+      this.broadcast()
+      return false
+    }
     const playerId = this.sockets.get(socketId)
     this.sockets.delete(socketId)
     const p = playerId != null ? this.playerById(playerId) : null
@@ -237,27 +351,112 @@ export class Room {
   }
 
   transferHost() {
-    const next = this.seatedPlayers().find((p) => p.socketId != null) ?? this.seatedPlayers()[0]
+    // Never hand the host to a bot — if no human is left, the room has no host.
+    const next = this.seatedPlayers().find((p) => p.socketId != null)
     this.hostId = next ? next.id : null
     if (next) this.addLog(`${next.name} is now the host`)
+  }
+
+  // If a human takes an AI persona's name, disambiguate the AI with " Jr.".
+  // Runs both when an AI is added (see addBot) and when a human joins/sits.
+  renameCollidingBots(humanName) {
+    const persona = AI_ROSTER.find((r) => r.name === humanName)
+    if (!persona) return
+    for (const p of this.seatedPlayers()) {
+      if (p.isBot && p.icon === persona.icon && !p.name.endsWith(' Jr.')) {
+        p.name = `${persona.name} Jr.`
+      }
+    }
+  }
+
+  // Pick an avatar for a new human that no other seated human is using.
+  pickAvatar() {
+    const used = this.seatedPlayers().filter((p) => !p.isBot).map((p) => p.icon)
+    const available = HUMAN_AVATARS.filter((a) => !used.includes(a))
+    return available.length
+      ? available[Math.floor(Math.random() * available.length)]
+      : HUMAN_AVATARS[Math.floor(Math.random() * HUMAN_AVATARS.length)]
   }
 
   addBot(actorId) {
     if (actorId !== this.hostId) return { ok: false, error: 'Only the host can add AI players' }
     const seat = this.seats.findIndex((s) => s === null)
     if (seat === -1) return { ok: false, error: 'Room is full' }
-    const used = new Set(this.seatedPlayers().map((p) => p.name))
-    const name = BOT_NAMES.find((n) => !used.has(n)) || `AI ${seat}`
+
+    const usedIcons = this.seatedPlayers().filter((p) => p.isBot).map((p) => p.icon)
+    const available = AI_ROSTER.filter((r) => !usedIcons.includes(r.icon))
+    if (available.length === 0) return { ok: false, error: 'Every AI is already seated' }
+
+    // First AI to join gets a weighted draw: Mima 30%, Hazeshade 20%, Andy 20%,
+    // the rest share the remaining 30% evenly. Every later AI is drawn evenly
+    // from whatever personas are still available. Each icon appears once.
+    let persona
+    if (usedIcons.length === 0) {
+      const weights = { Mima: 0.3, Hazeshade: 0.2, Andy: 0.2 }
+      const rest = available.filter((r) => !(r.name in weights))
+      const restEach = rest.length ? 0.3 / rest.length : 0
+      let roll = Math.random()
+      persona = available.find((r) => {
+        const w = r.name in weights ? weights[r.name] : restEach
+        if (roll < w) return true
+        roll -= w
+        return false
+      })
+    } else {
+      persona = available[Math.floor(Math.random() * available.length)]
+    }
+
+    // A human already using the persona's name gets the AI disambiguated
+    const humanNames = this.seatedPlayers().filter((p) => !p.isBot).map((p) => p.name)
+    const name = humanNames.includes(persona.name) ? `${persona.name} Jr.` : persona.name
+
     this.seats[seat] = {
       id: `bot-${randomUUID().slice(0, 8)}`,
       seat,
       name,
+      icon: persona.icon,
       isBot: true,
       chips: this.startingChips,
       socketId: null,
       wins: 0,
+      profile: newProfile(),
+      _handVpip: false,
+      _handPfr: false,
+      _preflopRaised: false,
     }
     this.addLog(`AI "${name}" joined the room`)
+    this.broadcast()
+    return { ok: true }
+  }
+
+  // Host-only: remove a player (or AI) from their seat. Safe mid-hand — the
+  // kicked player is folded out so the hand never waits on an empty seat.
+  kick(actorId, targetId) {
+    if (actorId !== this.hostId) return { ok: false, error: 'Only the host can remove players' }
+    if (targetId === actorId) return { ok: false, error: 'You cannot remove yourself' }
+    const target = this.playerById(targetId)
+    if (!target) return { ok: false, error: 'Player not found' }
+
+    // Fold them out of the current hand first (keeps log order natural)
+    if (this.phase === 'playing' && this.engine) {
+      const ep = this.engine.playerById(targetId)
+      if (ep && !ep.folded) {
+        if (this.engine.currentActor?.id === targetId) {
+          this.step(targetId, { type: 'fold' }) // advances the hand properly
+        } else {
+          ep.folded = true
+          ep.acted = true
+        }
+      }
+    }
+
+    // Tell the kicked player so their client drops back to the join screen
+    if (target.socketId != null) {
+      if (this.io) this.io.to(target.socketId).emit('room:kicked', { reason: 'Removed from the room by the host' })
+      this.sockets.delete(target.socketId)
+    }
+    this.seats[target.seat] = null
+    this.addLog(`${target.name} was removed from the room`)
     this.broadcast()
     return { ok: true }
   }
@@ -271,10 +470,74 @@ export class Room {
     // wait until the hand ends
     const inHand = this.phase === 'playing' && this.engine?.playerById(playerId)
     if (inHand && !inHand.folded) return { ok: false, error: 'Rebuy is available after this hand ends' }
+    const used = p.rebuyCount || 0
+    if (used >= this.maxRebuys) return { ok: false, error: 'You have used all your rebuys' }
     p.chips = this.startingChips
-    this.addLog(`${p.name} rebought ${this.startingChips} chips`)
+    p.rebuyCount = used + 1
+    const remaining = this.maxRebuys - p.rebuyCount
+    this.addLog(`${p.name} rebought ${this.startingChips} chips (${remaining} left)`)
+    this.broadcast()
+    return { ok: true, count: p.rebuyCount, remaining }
+  }
+
+  // A human voluntarily leaves. Mid-game their seat is taken over by an AI
+  // (keeping chips + current-hand cards); in the lobby the seat is simply
+  // freed, with no takeover. When the last human leaves, the room is destroyed.
+  leave(playerId, socketId) {
+    const p = this.playerById(playerId)
+    if (!p) return { ok: false, error: 'You are not seated' }
+    if (p.isBot) return { ok: false, error: 'Bots cannot leave' }
+    const name = p.name
+    const wasHost = p.id === this.hostId
+
+    if (socketId && this.io) this.io.to(socketId).emit('room:left', { reason: 'You left the game' })
+    this.sockets.delete(socketId)
+
+    if (this.phase === 'playing' && this.engine) {
+      // In a running game: an AI takes over the seat
+      this.takeOverByBot(p)
+      if (wasHost) this.transferHost()
+      this.addLog(`${name} left — an AI took over the seat`)
+      this.pushChat('System', `${name} has left — an AI is now playing their seat.`)
+    } else {
+      // Lobby (or between games): just free the seat, no takeover
+      this.seats[p.seat] = null
+      if (wasHost) this.transferHost()
+      this.addLog(`${name} left the room`)
+    }
+
+    // The last human leaving takes the whole room down with them
+    if (!this.seatedPlayers().some((q) => !q.isBot)) {
+      this.destroy()
+      return { ok: true }
+    }
     this.broadcast()
     return { ok: true }
+  }
+
+  // Convert a (human) seat into an AI seat, keeping its chips and — if a hand
+  // is underway — its hole cards and its place in the betting.
+  takeOverByBot(seatPlayer) {
+    // Keep the player's name and avatar — an AI now plays the same seat.
+    seatPlayer.isBot = true
+    seatPlayer.socketId = null
+    seatPlayer.afk = false
+    seatPlayer.rebuyCount = 0
+    seatPlayer._handVpip = false
+    seatPlayer._handPfr = false
+    seatPlayer._preflopRaised = false
+
+    // Mid-hand: the engine's copy must also become a bot so the scheduler plays
+    // it, and so it keeps its already-dealt hole cards. Name stays unchanged.
+    if (this.engine && this.phase === 'playing') {
+      const ep = this.engine.playerById(seatPlayer.id)
+      if (ep) {
+        ep.isBot = true
+        if (this.engine.currentActor?.id === seatPlayer.id) {
+          this.scheduleTurn()
+        }
+      }
+    }
   }
 
   // Opt-in reveal: a contestant chooses to show their cards after the hand ends
@@ -311,12 +574,126 @@ export class Room {
     return { ok: true }
   }
 
+  // Append a chat line directly (no cooldown) — used by AI banter and by
+  // spectator chat, which bypass the seated-player cooldown path.
+  pushChat(name, text) {
+    this.chat.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, text, t: Date.now() })
+    if (this.chat.length > 50) this.chat.splice(0, this.chat.length - 50)
+  }
+
+  sendSpectatorChat(socketId, text) {
+    const spec = this.spectators.get(socketId)
+    if (!spec) return { ok: false, error: 'You are not in this room' }
+    const clean = String(text || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, CONFIG.CHAT_MAX_LEN)
+    if (!clean) return { ok: false, error: 'Empty message' }
+    this.pushChat(spec.name, clean)
+    this.broadcast()
+    return { ok: true }
+  }
+
+  // A spectator takes a free seat and joins the game (once a seat is open).
+  sit(socketId) {
+    const spec = this.spectators.get(socketId)
+    if (!spec) return { ok: false, error: 'You are not spectating' }
+    const seat = this.seats.findIndex((s) => s === null)
+    if (seat === -1) return { ok: false, error: 'No free seat right now' }
+    const player = {
+      id: spec.id,
+      seat,
+      name: spec.name,
+      isBot: false,
+      icon: this.pickAvatar(),
+      chips: this.startingChips,
+      socketId,
+      wins: 0,
+      rebuyCount: 0,
+      profile: newProfile(),
+      _handVpip: false,
+      _handPfr: false,
+      _preflopRaised: false,
+      afk: false,
+    }
+    this.seats[seat] = player
+    this.sockets.set(socketId, player.id)
+    this.spectators.delete(socketId)
+    if (!this.hostId) this.hostId = player.id
+    this.renameCollidingBots(player.name)
+    this.addLog(`${player.name} joined the game`)
+    this.broadcast()
+    return { ok: true, playerId: player.id }
+  }
+
+  // A seated player switches to spectating (frees their seat). Used mostly in
+  // the lobby, where joining normally seats you.
+  becomeSpectator(playerId, socketId) {
+    const p = this.playerById(playerId)
+    if (!p) return { ok: false, error: 'You are not seated' }
+    if (p.isBot) return { ok: false, error: 'Bots cannot spectate' }
+    const name = p.name
+    this.seats[p.seat] = null
+    this.sockets.delete(socketId)
+    this.spectators.set(socketId, { id: p.id, name, socketId })
+    if (p.id === this.hostId) this.transferHost()
+    this.addLog(`${name} is now spectating`)
+    if (!this.seatedPlayers().some((q) => !q.isBot)) {
+      this.destroy()
+      return { ok: true }
+    }
+    this.broadcast()
+    return { ok: true, playerId: p.id, spectator: true }
+  }
+
+  // Human clicked "back to game": clear their 托管 flag and, if it's currently
+  // their turn, restart their full-length timer.
+  returnToGame(playerId) {
+    const p = this.playerById(playerId)
+    if (!p) return { ok: false, error: 'You are not seated' }
+    p.afk = false
+    this.addLog(`${p.name} is back`)
+    if (this.phase === 'playing' && this.engine?.currentActor?.id === playerId) {
+      this.scheduleTurn()
+    }
+    this.broadcast()
+    return { ok: true }
+  }
+
+  // Track opponent tendencies for the AI: VPIP/PFR per hand, and how often a
+  // player folds when facing a bet (fold-to-bet → fold equity). Called on every
+  // successful action, human and bot alike.
+  observeProfile(playerId, phase, legal, action) {
+    const seatP = this.playerById(playerId)
+    const prof = seatP?.profile
+    if (!prof) return
+    if (phase === 'preflop') {
+      if (!seatP._handVpip && (action.type === 'call' || action.type === 'raise')) {
+        seatP._handVpip = true
+        prof.vpip++
+      }
+      if (!seatP._handPfr && action.type === 'raise') {
+        seatP._handPfr = true
+        prof.pfr++
+      }
+      if (action.type === 'raise') seatP._preflopRaised = true
+    }
+    if (legal && legal.toCall > 0) {
+      prof.facedBet++
+      if (action.type === 'fold') prof.foldedToBet++
+    }
+  }
+
   destroy() {
     this.clearTimers()
     if (this.lobbyExpireTimer) {
       clearTimeout(this.lobbyExpireTimer)
       this.lobbyExpireTimer = null
     }
+    // Spectators watch a live room; close them out too.
+    if (this.io) {
+      for (const socketId of this.spectators.keys()) {
+        this.io.to(socketId).emit('room:closed', { reason: 'Room closed' })
+      }
+    }
+    this.spectators.clear()
     this.phase = 'lobby'
     rooms.delete(this.id)
   }
@@ -333,7 +710,11 @@ export class Room {
     }
     // Starting a new game: reset every seat's chips to the starting stack
     // (the previous game's champion is already recorded in the log)
-    for (const p of this.seatedPlayers()) p.chips = this.startingChips
+    for (const p of this.seatedPlayers()) {
+      p.chips = this.startingChips
+      p.rebuyCount = 0
+    }
+    this.gameOver = null
     this.dealerSeat = null
     const present = this.seatedPlayers().filter((p) => p.isBot || p.socketId != null)
     if (present.length < CONFIG.MIN_PLAYERS) {
@@ -352,6 +733,15 @@ export class Room {
     if (this.phase !== 'playing' || eligible.length < CONFIG.MIN_PLAYERS) {
       this.endGame(eligible)
       return
+    }
+
+    // Count this hand toward each dealt player's stats and reset the per-hand
+    // tracking flags that observeProfile sets.
+    for (const p of eligible) {
+      if (p.profile) p.profile.hands++
+      p._handVpip = false
+      p._handPfr = false
+      p._preflopRaised = false
     }
 
     // Dealer rotates by seat order
@@ -383,7 +773,29 @@ export class Room {
     this.engine = null
     this.phase = 'lobby'
     const champ = eligible[0]
-    if (champ) this.addLog(`🏆 ${champ.name} wins the whole game!`)
+    if (champ) {
+      this.addLog(`🏆 ${champ.name} wins the whole game!`)
+      // Settlement data for the client's victory screen: champion + final
+      // standings of every seat, ranked by remaining chips
+      const standings = this.seatedPlayers()
+        .map((p) => ({ id: p.id, name: p.name, isBot: p.isBot, icon: p.icon, chips: p.chips, wins: p.wins || 0 }))
+        .sort((a, b) => b.chips - a.chips)
+        .map((p, i) => ({ ...p, rank: i + 1 }))
+      this.gameOver = {
+        id: `${this.handCount}-${Date.now()}`, // lets clients dedupe dismissal across games
+        champion: {
+          id: champ.id,
+          name: champ.name,
+          isBot: champ.isBot,
+          icon: champ.icon,
+          chips: champ.chips,
+          wins: champ.wins || 0,
+        },
+        championSpeech: champ.isBot ? AI_CHAMPION[champ.icon] : null,
+        hands: this.handCount,
+        standings,
+      }
+    }
     this.broadcast()
   }
 
@@ -409,6 +821,28 @@ export class Room {
         this.addLog(`${w.name}${reveal ? ` (${reveal.handName})` : ''} wins ${w.amount}`)
       }
     }
+    // Auto-reveal AI players who did NOT fold — showdown hands and uncontested
+    // winners show their cards, while a folded AI keeps them face-down.
+    for (const ep of this.engine.players) {
+      if (!ep.isBot || ep.folded) continue
+      this.revealed.add(ep.id)
+    }
+    // Winner bots boast; a bot that just busted out sends its farewell. Bots
+    // that lost but still have chips stay quiet.
+    const winners = new Set((result.winners || []).map((w) => w.id))
+    for (const ep of this.engine.players) {
+      if (!ep.isBot) continue
+      const seatP = this.seats[ep.seat]
+      const icon = seatP?.icon
+      if (!icon) continue
+      if (winners.has(ep.id)) {
+        const line = AI_WIN[icon]
+        if (line) this.pushChat(ep.name, line)
+      } else if (ep.chips === 0) {
+        const line = AI_BUST[icon]
+        if (line) this.pushChat(ep.name, line)
+      }
+    }
     this.broadcast()
     // Show the result for a while, then start the next hand
     this.handTimer = setTimeout(() => {
@@ -422,15 +856,27 @@ export class Room {
   applyAction(playerId, action) {
     if (this.phase !== 'playing' || !this.engine) return { ok: false, error: 'No game in progress' }
     if (!action || typeof action.type !== 'string') return { ok: false, error: 'Invalid action' }
-    return this.step(playerId, action)
+    const res = this.step(playerId, action)
+    if (res.ok) {
+      // Acting manually means the human is back from 托管
+      const p = this.playerById(playerId)
+      if (p && p.afk) {
+        p.afk = false
+        this.broadcast()
+      }
+    }
+    return res
   }
 
   // Execute one action and handle progression, logging and broadcasting;
   // returns an error if the decision is illegal
   step(playerId, action) {
+    const phase = this.engine.phase
+    const legal = this.engine.getLegalActions(playerId)
     const prevCommunity = this.engine.community.length
     const res = this.engine.act(playerId, action)
     if (!res.ok) return res
+    this.observeProfile(playerId, phase, legal, action)
     this.logAction(playerId, action)
     if (this.engine.community.length > prevCommunity && this.engine.phase !== 'handEnd') {
       this.addLog(`Board: ${this.engine.community.map(cardLabel).join(' ')}`)
@@ -493,16 +939,38 @@ export class Room {
       // socketId); the engine player is a stripped copy without that field.
       const seatP = this.playerById(actor.id)
       const online = !!seatP?.socketId
-      const timeout =
-        timeoutOverrideMs ?? (online ? CONFIG.ACTION_TIMEOUT_MS : CONFIG.OFFLINE_ACTION_TIMEOUT_MS)
-      this.turnEndsAt = Date.now() + timeout
-      this.turnDurationMs = timeout
-      this.turnTimer = setTimeout(() => this.autoAct(actor.id), timeout)
+      if (seatP?.afk) {
+        // AFK 托管: each turn gets only a short window, then auto-fold
+        const timeout = CONFIG.AFK_TURN_MS
+        this.turnEndsAt = Date.now() + timeout
+        this.turnDurationMs = timeout
+        this.turnTimer = setTimeout(() => this.autoFold(actor.id), timeout)
+      } else if (!online) {
+        // Disconnected: shorten the wait so the table doesn't stall
+        const timeout = timeoutOverrideMs ?? CONFIG.OFFLINE_ACTION_TIMEOUT_MS
+        this.turnEndsAt = Date.now() + timeout
+        this.turnDurationMs = timeout
+        this.turnTimer = setTimeout(() => this.autoAct(actor.id), timeout)
+      } else {
+        // Connected but silent: full window, then drop into 托管 and fold
+        const timeout = CONFIG.ACTION_TIMEOUT_MS
+        this.turnEndsAt = Date.now() + timeout
+        this.turnDurationMs = timeout
+        this.turnTimer = setTimeout(() => this.onHumanTimeout(actor.id), timeout)
+      }
     }
   }
 
-  // Human timeout → AI plays for them:
-  // someone ahead raised (can't check) → fold; otherwise (all checked) → check
+  // Human timeout → drop the player into 托管 and fold this turn.
+  onHumanTimeout(playerId) {
+    this.turnTimer = null
+    if (!this.engine || this.engine.currentActor?.id !== playerId) return
+    const seatP = this.playerById(playerId)
+    if (seatP) seatP.afk = true
+    this.autoFold(playerId)
+  }
+
+  // Disconnected (offline) auto-act: fold if facing a raise, else check.
   autoAct(playerId) {
     this.turnTimer = null
     if (!this.engine || this.engine.currentActor?.id !== playerId) return
@@ -510,8 +978,17 @@ export class Room {
     const p = this.engine.playerById(playerId)
     const facingRaise = !legal.check
     const action = facingRaise ? { type: 'fold' } : { type: 'check' }
-    this.addLog(`${p.name} timed out — auto-${facingRaise ? 'folded (facing a raise)' : 'checked'}`)
+    this.addLog(`${p.name} is offline — auto-${facingRaise ? 'folded (facing a raise)' : 'checked'}`)
     this.step(playerId, action)
+  }
+
+  // AFK 托管: fold on their turn (we never decide for them — just fold).
+  autoFold(playerId) {
+    this.turnTimer = null
+    if (!this.engine || this.engine.currentActor?.id !== playerId) return
+    const p = this.engine.playerById(playerId)
+    this.addLog(`${p.name} is away — auto-folding`)
+    this.step(playerId, { type: 'fold' })
   }
 
   async botAct(botId) {
@@ -552,7 +1029,17 @@ export class Room {
       stack: actor.chips,
       opponents: players
         .filter((q) => q.id !== botId)
-        .map((q) => ({ name: q.name, stack: q.chips, bet: q.bet, folded: q.folded })),
+        .map((q) => {
+          const seatP = this.playerById(q.id)
+          return {
+            name: q.name,
+            stack: q.chips,
+            bet: q.bet,
+            folded: q.folded,
+            profile: seatP?.profile ?? null,
+            preflopRaised: !!seatP?._preflopRaised,
+          }
+        }),
       rng: Math.random,
     }
 

@@ -6,7 +6,7 @@ import ChatBox from './ChatBox.jsx'
 import { PHASE_NAMES, tableLayout } from '../lib.js'
 
 // Main game screen: table + seats + community cards + action bar + log.
-export default function GameTable({ state, onAction, onRebuy, onReveal, onChat }) {
+export default function GameTable({ state, onAction, onRebuy, onReveal, onChat, onLeave }) {
   const { room, game } = state
   const youId = room.youId
   const players = game?.players ?? []
@@ -36,6 +36,11 @@ export default function GameTable({ state, onAction, onRebuy, onReveal, onChat }
           Blinds {room.smallBlind}/{room.bigBlind}
         </span>
         <span className="phase">{game ? PHASE_NAMES[game.phase] ?? game.phase : ''}</span>
+        {!room.youSpectating ? (
+          <button className="btn btn-ghost leave-btn" onClick={onLeave}>
+            Leave
+          </button>
+        ) : null}
       </header>
 
       <div className="game-body">
@@ -77,9 +82,13 @@ export default function GameTable({ state, onAction, onRebuy, onReveal, onChat }
                 <span key={p.id} className={`bench-player ${p.id === youId ? 'me' : ''}`}>
                   {p.name} ({p.chips})
                   {p.id === youId && p.chips === 0 ? (
-                    <button className="mini-btn" onClick={onRebuy}>
-                      Rebuy
-                    </button>
+                    p.remainingRebuys > 0 ? (
+                      <button className="mini-btn" onClick={onRebuy}>
+                        Rebuy ({p.remainingRebuys} left)
+                      </button>
+                    ) : (
+                      <span className="bench-out">Eliminated</span>
+                    )
                   ) : null}
                 </span>
               ))}

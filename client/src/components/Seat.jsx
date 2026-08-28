@@ -37,11 +37,8 @@ export default function Seat({ p, isDealer, isActor, isWinner, endsAt, duration 
         </span>
       ) : null}
       <div className="seat-head">
-        <span className="seat-avatar">{avatarFor(p.name)}</span>
-        <span className="seat-name">
-          {p.name}
-          {p.isBot ? ' 🤖' : ''}
-        </span>
+        <span className="seat-avatar">{p.icon || avatarFor(p.name)}</span>
+        <span className="seat-name">{p.name}</span>
       </div>
       <div className="seat-chips">💰 {p.chips.toLocaleString()}</div>
       <div className="seat-cards">
@@ -49,9 +46,11 @@ export default function Seat({ p, isDealer, isActor, isWinner, endsAt, duration 
           ? hole.map((c, i) => <Card key={i} card={c} size="sm" dim={p.folded} />)
           : Array.from({ length: 2 }, (_, i) => <Card key={i} card={null} size="sm" dim />)}
       </div>
+      {p.isBot ? <span className="badge ai-badge">AI</span> : null}
       {p.allIn && !p.folded ? <span className="badge allin-badge">All-in</span> : null}
       {p.folded ? <span className="badge folded-badge">Folded</span> : null}
-      {p.handName && !p.folded ? <span className="badge hand-badge">{p.handName}</span> : null}
+      {p.afk ? <span className="badge afk-badge">AFK</span> : null}
+      {p.handName && (!p.folded || p.revealed) ? <span className="badge hand-badge">{p.handName}</span> : null}
       {isDealer ? <span className="dealer-btn" title="Dealer">D</span> : null}
     </div>
   )

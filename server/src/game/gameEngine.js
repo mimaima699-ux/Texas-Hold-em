@@ -10,7 +10,8 @@ export class PokerGame {
   // players: [{ id, seat, name, chips, isBot }]
   // initialDealerIndex: index in players of the first hand's dealer
   // (omitted means player 0 deals the first hand)
-  constructor({ players, smallBlind, bigBlind, onResult, initialDealerIndex }) {
+  constructor({ players, smallBlind, bigBlind, onResult, initialDealerIndex, rng = Math.random }) {
+    this.rng = rng
     this.players = players
       .map((p, i) => ({
         id: p.id,
@@ -76,7 +77,7 @@ export class PokerGame {
 
   startHand() {
     this.handNumber++
-    this.deck = shuffle(createDeck())
+    this.deck = shuffle(createDeck(), this.rng)
     this.community = []
     this.phase = 'preflop'
     this.streetBet = 0

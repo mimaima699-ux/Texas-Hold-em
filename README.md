@@ -11,6 +11,14 @@ A real-time, browser-based **Texas Hold'em** poker game. Host a room, invite up 
   that falls back to the heuristic AI when the endpoint is unavailable
 - **Real-time multiplayer** — Socket.IO pushes, auto-reconnect, action countdowns,
   and lobby rooms that can be shared via a code or link
+- **Victory screen** — when a game ends, a settlement overlay crowns the champion
+  and shows the final standings (rank, hands won, chips)
+- **Spectator mode & rebuys** — join a full room to watch, or rebuy back in after
+  busting; the host can kick players mid-game
+- **Improved AI** — Monte Carlo equity, board texture / draw awareness, and an
+  AI benchmark harness (`scripts/ai-benchmark.mjs`)
+
+> 🔗 **Repository:** <https://github.com/mimaima699-ux/Texas-Hold-em>
 
 ---
 
@@ -39,9 +47,10 @@ npm start          # single process, visit http://localhost:3001 directly
 ## Testing
 
 ```bash
-npm test           # unit tests (vitest): hand evaluator / pots / game engine
+npm test           # unit tests (vitest): hand evaluator / pots / game engine / AI
 npm run dev:server # start the server, then:
 npm run smoke      # e2e smoke test — room + AI hands + chip conservation
+node scripts/ai-benchmark.mjs   # AI win-rate vs baseline (optional)
 ```
 
 ---
@@ -70,12 +79,13 @@ client/src/
   App.jsx               Connection & room session management (localStorage,
                         auto-reconnect)
   components/           JoinScreen / RoomLobby / GameTable / Seat / Card /
-                        ActionBar / ChatBox
+                        ActionBar / ChatBox / VictoryScreen
   lib.js                Shared helpers (phase names, table layout, clock sync)
 scripts/
   smoke.mjs             End-to-end smoke test
   room-test.mjs         Room lifecycle + chat test
   llm-test.mjs          Standalone LLM decision probe
+  ai-benchmark.mjs      Heads-up AI win-rate benchmark vs a baseline (paired seeds)
 ```
 
 ---
@@ -87,11 +97,14 @@ scripts/
 | `room:create`   | `{ name, startingChips?, smallBlind?, bigBlind? }`   | Create and join a room |
 | `room:join`     | `{ roomId, name, playerId? }`                        | Join a room (`playerId` = reconnect) |
 | `room:addBot`   | —                                                    | Host adds an AI player |
+| `room:kick`     | `{ targetId }`                                        | Host removes a player from the room |
 | `game:start`    | —                                                    | Host starts a game (resets every seat to the starting stack) |
 | `game:action`   | `{ type: 'fold'/'check'/'call'/'raise', amount? }`   | Act; raise `amount` is the target **total** bet |
 | `game:rebuy`    | —                                                    | Rebuy the starting stack after busting |
 | `game:reveal`   | —                                                    | Show your hand during the reveal window |
 | `chat:send`     | `{ text }`                                           | Send a room chat message |
+| `room:spectate` | `{ name }`                                           | Watch a full room as a spectator |
+| `room:leave`    | —                                                    | Leave the room (or stop spectating) |
 
 After every state change the server pushes a **personalized `state` event** to
 each connection — your hole cards are only sent to you; other players' cards are

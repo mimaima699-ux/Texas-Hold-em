@@ -11,7 +11,7 @@ export function rankText(rank) {
   return String(RANK_LABEL[rank] ?? rank)
 }
 
-const AVATARS = ['🐺', '🦊', '🐻', '🐼', '🦁', '🐸', '🦉', '🐵', '🐯', '🐰', '🦝', '🐨', '🐗', '🦔']
+const AVATARS = ['🐺', '🦊', '🐼', '🦁', '🐸', '🦉', '🐵', '🐯', '🐰', '🦝', '🐨', '🐗', '🦔']
 
 export function avatarFor(name) {
   let h = 0
@@ -39,12 +39,12 @@ export function tableLayout(n) {
     const cos = Math.cos(a)
     const sin = Math.sin(a)
     pts.push({
-      x: 50 + 45 * cos,
-      y: 50 + 43 * sin,
-      bx: 50 + 24 * cos,
-      by: 50 + 24 * sin,
-      dx: 50 + 32 * cos, // dealer button position
-      dy: 50 + 33 * sin,
+      x: 50 + 39 * cos,
+      y: 47 + 36 * sin,
+      bx: 50 + 20 * cos,
+      by: 47 + 18 * sin,
+      dx: 50 + 28 * cos, // dealer button position
+      dy: 47 + 26 * sin,
     })
   }
   return pts

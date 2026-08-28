@@ -35,12 +35,14 @@ async function copyText(text) {
 }
 
 // Game lobby: shows the room code and seats; the host can add AI and start.
-export default function RoomLobby({ state, onStart, onAddBot, onRebuy, onChat }) {
+export default function RoomLobby({ state, onStart, onAddBot, onRebuy, onKick, onChat, onLeave, onSpectate }) {
   const { room } = state
   const isHost = room.youId === room.hostId
   const seated = room.seats.filter(Boolean)
-  const eligible = seated.filter((p) => p.chips > 0 && (p.isBot || p.connected))
-  const canStart = eligible.length >= 2
+  // Any two present players can start — starting a game resets every seat's
+  // chips, so leftover stacks from the previous game don't matter
+  const present = seated.filter((p) => p.isBot || p.connected)
+  const canStart = present.length >= 2
   const me = seated.find((p) => p.id === room.youId)
 
   const shareLink = `${PUBLIC_URL}/?r=${room.id}`
@@ -83,12 +85,17 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy, onChat })
           {room.seats.map((p, i) =>
             p ? (
               <div key={i} className={`lobby-seat ${p.id === room.youId ? 'me' : ''}`}>
-                <span className="lobby-avatar">{avatarFor(p.name)}</span>
+                <span className="lobby-avatar">{p.icon || avatarFor(p.name)}</span>
                 <span className="lobby-name">
                   {p.name}
                   {p.isBot ? ' 🤖' : ''}
                 </span>
                 <span className="lobby-chips">💰 {p.chips.toLocaleString()}</span>
+                {isHost && p.id !== room.youId ? (
+                  <button className="mini-btn danger" title="Remove this player from the room" onClick={() => onKick(p.id)}>
+                    ✕ Remove
+                  </button>
+                ) : null}
                 {!p.connected && !p.isBot ? <span className="lobby-offline">Offline</span> : null}
                 {p.id === room.hostId ? <span className="lobby-host">Host</span> : null}
                 {p.id === room.youId && p.chips === 0 ? (
@@ -112,7 +119,7 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy, onChat })
                 Add AI ({seated.length}/{room.maxPlayers})
               </button>
               <button className="btn btn-primary" onClick={onStart} disabled={!canStart}>
-                {canStart ? 'Start Game' : `Need ${2 - eligible.length} more player(s)`}
+                {canStart ? 'Start Game' : `Need ${2 - present.length} more player(s)`}
               </button>
             </>
           ) : (
@@ -121,9 +128,24 @@ export default function RoomLobby({ state, onStart, onAddBot, onRebuy, onChat })
         </div>
 
         {me && me.chips === 0 && !isHost ? (
-          <button className="btn btn-ghost" onClick={onRebuy}>
-            Rebuy {room.startingChips.toLocaleString()}
-          </button>
+          me.remainingRebuys > 0 ? (
+            <button className="btn btn-ghost" onClick={onRebuy}>
+              Rebuy {room.startingChips.toLocaleString()} ({me.remainingRebuys} left)
+            </button>
+          ) : (
+            <span className="bench-out" style={{ marginTop: 14 }}>Eliminated — no rebuys left</span>
+          )
+        ) : null}
+
+        {!room.youSpectating ? (
+          <div style={{ marginTop: 14, display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <button className="btn btn-ghost leave-btn" onClick={onSpectate}>
+              Spectate
+            </button>
+            <button className="btn btn-ghost leave-btn" onClick={onLeave}>
+              Leave room
+            </button>
+          </div>
         ) : null}
       </div>
 

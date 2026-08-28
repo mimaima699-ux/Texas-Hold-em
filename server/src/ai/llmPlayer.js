@@ -6,6 +6,8 @@
 // so the table never stalls.
 
 import { CONFIG } from '../config.js'
+import { equityVsRanges } from './equity.js'
+import { estimateRangePct } from './aiPlayer.js'
 
 let llmReady = false
 
@@ -45,7 +47,14 @@ function authHeaders() {
   return CONFIG.LLM_API_KEY ? { Authorization: `Bearer ${CONFIG.LLM_API_KEY}` } : {}
 }
 
-const SYSTEM_PROMPT = `You are a strong no-limit Texas Hold'em player: solid preflop hand selection, pot-odds aware postflop, capable of well-timed aggression and occasional bluffs.
+const SYSTEM_PROMPT = `You are a normal but action-friendly no-limit Texas Hold'em player: you play a fairly wide range and give action, but you still fold when you clearly should.
+
+Decide with common sense:
+- Preflop: fold only genuine trash (e.g. small offsuit cards with big gaps) against real raises; call or raise with any playable hand — pairs, suited connectors, two-broadway cards, and decent aces.
+- Postflop: call when you have a made hand, a live draw, or the pot odds justify it. Fold when you have nothing and the bet is significant — don't pay off big bets with air.
+
+Use the estimated equity vs the pot odds as your guide: fold when equity is well below the pot odds and you have no draw; call or raise when it is close or better. Mix in an occasional bluff, mostly against opponents who fold often.
+
 Always reply with ONE JSON object only — no markdown, no extra words:
 {"action":"fold"} or {"action":"check"} or {"action":"call"} or {"action":"raise","amount":N}
 For "raise", amount is the TOTAL bet you raise TO (not the raise increment), and must be an integer within the allowed range given to you.`
@@ -54,6 +63,16 @@ function positionText(position) {
   if (position >= 0.75) return 'late (good position, act last)'
   if (position >= 0.4) return 'middle'
   return 'early (act first)'
+}
+
+// Compact per-opponent read for the prompt (percentages, rounded).
+function readsFor(opp) {
+  const p = opp?.profile
+  if (!p || p.hands < 1) return 'no reads yet'
+  const vpip = Math.round((p.vpip / p.hands) * 100)
+  const pfr = Math.round((p.pfr / p.hands) * 100)
+  const fold = p.facedBet > 0 ? `, folds-to-bet ${Math.round((p.foldedToBet / p.facedBet) * 100)}%` : ''
+  return `VPIP ${vpip}%, PFR ${pfr}%${fold}`
 }
 
 function buildUserPrompt(ctx) {
@@ -65,14 +84,21 @@ function buildUserPrompt(ctx) {
   if (legal.canCall) options.push(`call ${legal.call}`)
   if (legal.canRaise) options.push(`raise to any total in [${legal.raiseMin}, ${legal.raiseMax}]`)
 
+  // Same range read as the heuristic AI, so the LLM sees the world the same way
+  const active = opponents.filter((o) => !o.folded)
+  const ranges = active.map(estimateRangePct)
+  const equity = equityVsRanges(hole, community, ranges, { iterations: 300 })
+  const equityLine = `Estimated equity vs this field: ${Math.round(equity * 100)}% (pot odds ${potOdds}).`
+
   return `No-Limit Texas Hold'em hand. Blinds ${smallBlind ?? Math.round(bigBlind / 2)}/${bigBlind}.
 Your stack: ${stack}. Pot: ${potSize}.
 Your hole cards: ${handText(hole)}
 Board: ${board}
 Your position: ${positionText(position)}.
+${equityLine}
 Opponents: ${
     opponents.length
-      ? opponents.map((o) => `${o.name} (stack ${o.stack}, bet ${o.bet}${o.folded ? ', FOLDED' : ''})`).join('; ')
+      ? opponents.map((o) => `${o.name} (stack ${o.stack}, bet ${o.bet}, ${readsFor(o)}${o.folded ? ', FOLDED' : ''})`).join('; ')
       : 'unknown'
   }
 Current highest bet on this street: ${currentBet}. You must put in ${toCall} more to call (pot odds: ${potOdds}).

@@ -1,16 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 
-const QUICK_EMOJIS = ['👍', '😂', '😱', '😭', '🎉', '😈', '🤔', '🤝', '🍺', '🐺']
+const QUICK_EMOJIS = ['😅', '🤣', '😇', '😍', '😘', '😋', '🤪', '🤓', '🥳', '🤔', '😭', '🤬', '🥵', '😱', '🤡', '🫶', '👐', '👍', '💋', '💞', '🍺']
 
 // Room chat: text messages + quick emoji bar. Collapsible to save table space.
 export default function ChatBox({ chat = [], onSend, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
   const [text, setText] = useState('')
+  const [unread, setUnread] = useState(false)
   const listRef = useRef(null)
+  const prevLen = useRef(chat.length)
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [chat.length, open])
+
+  // A message arriving while collapsed marks the chat unread (red dot)
+  useEffect(() => {
+    if (chat.length > prevLen.current && !open) setUnread(true)
+    prevLen.current = chat.length
+  }, [chat.length, open])
+
+  const toggle = () => {
+    setOpen((o) => !o)
+    setUnread(false)
+  }
 
   const send = (v) => {
     const clean = String(v || '').trim()
@@ -23,8 +36,9 @@ export default function ChatBox({ chat = [], onSend, defaultOpen = false }) {
 
   return (
     <div className={`chat-box ${open ? 'open' : ''}`}>
-      <button className="chat-toggle" onClick={() => setOpen(!open)}>
+      <button className="chat-toggle" onClick={toggle}>
         💬 Chat
+        {unread ? <span className="chat-dot" /> : null}
         {!open && lastMsg ? <span className="chat-last"> · {lastMsg.name}: {lastMsg.text.slice(0, 14)}</span> : ''}
       </button>
       {open ? (

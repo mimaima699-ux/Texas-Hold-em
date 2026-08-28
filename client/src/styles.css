@@ -50,8 +50,8 @@ body {
 .btn {
   border: none;
   border-radius: 10px;
-  padding: 10px 22px;
-  font-size: 15px;
+  padding: 12px 26px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   color: #fff;
@@ -105,6 +105,13 @@ body {
   padding: 1px 8px;
   font-size: 12px;
   cursor: pointer;
+}
+.mini-btn.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+.mini-btn.danger:hover {
+  background: rgba(229, 72, 77, 0.15);
 }
 
 /* ==== Join screen ==== */
@@ -168,8 +175,12 @@ body {
 }
 .room-settings {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
+}
+.room-settings label:first-child,
+.room-settings label:last-child {
+  grid-column: span 2;
 }
 .room-settings label {
   display: flex;
@@ -177,14 +188,17 @@ body {
   gap: 4px;
   font-size: 11px;
   color: var(--muted);
+  min-width: 0;
 }
 .room-settings input {
   background: #0a1310;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--text);
-  padding: 8px 10px;
+  padding: 6px 8px;
   font-size: 14px;
+  width: 100%;
+  min-width: 0;
 }
 .room-list {
   margin-top: 20px;
@@ -410,11 +424,11 @@ body {
 }
 .seat {
   position: relative;
-  min-width: 118px;
+  min-width: 156px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 8px 12px 10px;
+  padding: 10px 15px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -432,7 +446,7 @@ body {
 .seat-name {
   font-size: 13px;
   font-weight: 600;
-  max-width: 90px;
+  max-width: 118px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -443,8 +457,8 @@ body {
 }
 .seat-cards {
   display: flex;
-  gap: 4px;
-  height: 34px;
+  gap: 6px;
+  height: 52px;
   align-items: center;
 }
 .seat.acting {
@@ -583,11 +597,15 @@ body {
   border-color: var(--gold);
   color: var(--gold);
 }
+.bench-out {
+  color: var(--red);
+  font-size: 11px;
+}
 
 /* ==== Cards ==== */
 .card {
-  width: 44px;
-  height: 62px;
+  width: 52px;
+  height: 74px;
   border-radius: 6px;
   background: #fdfdf8;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
@@ -605,23 +623,23 @@ body {
   color: #1f242b;
 }
 .card-rank {
-  font-size: 18px;
+  font-size: 21px;
   line-height: 1;
 }
 .card-suit {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.1;
 }
 .card-sm {
-  width: 26px;
-  height: 36px;
+  width: 38px;
+  height: 52px;
   border-radius: 4px;
 }
 .card-sm .card-rank {
-  font-size: 12px;
+  font-size: 15px;
 }
 .card-sm .card-suit {
-  font-size: 11px;
+  font-size: 14px;
 }
 .card.back {
   background:
@@ -743,9 +761,9 @@ body {
 .chat-box {
   position: fixed;
   left: 14px;
-  bottom: 104px;
+  bottom: 160px;
   z-index: 50;
-  width: 262px;
+  width: 310px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -783,9 +801,9 @@ body {
   gap: 8px;
 }
 .chat-list {
-  max-height: 170px;
+  max-height: 210px;
   overflow-y: auto;
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.6;
 }
 .chat-msg {
@@ -802,8 +820,8 @@ body {
   color: var(--muted);
 }
 .chat-emojis {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
   gap: 4px;
 }
 .chat-emojis button {
@@ -894,6 +912,89 @@ body {
   font-size: 15px;
 }
 
+/* ==== Victory / settlement screen ==== */
+.victory-overlay {
+  z-index: 95;
+  background: rgba(5, 10, 8, 0.85);
+}
+.victory-panel {
+  width: min(440px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--panel-solid);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 26px 28px 24px;
+  text-align: center;
+  box-shadow: 0 0 60px rgba(245, 194, 66, 0.22);
+  animation: victoryIn 0.45s cubic-bezier(0.22, 1.4, 0.4, 1);
+}
+@keyframes victoryIn {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.victory-trophy {
+  font-size: 58px;
+  line-height: 1;
+  animation: trophyBounce 1.6s ease-in-out infinite;
+}
+@keyframes trophyBounce {
+  50% {
+    transform: translateY(-6px) scale(1.06);
+    filter: drop-shadow(0 6px 14px rgba(245, 194, 66, 0.5));
+  }
+}
+.victory-title {
+  font-size: 21px;
+  color: var(--gold);
+  margin: 12px 0 4px;
+  text-shadow: 0 2px 12px rgba(245, 194, 66, 0.3);
+}
+.victory-me {
+  color: var(--gold);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.victory-stats {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 4px 0 14px;
+}
+.victory-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+.victory-table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.victory-table td {
+  padding: 7px 4px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.07);
+}
+.victory-table tr.champ td {
+  color: var(--gold);
+  font-weight: 700;
+}
+.victory-table tr.me td {
+  background: rgba(245, 194, 66, 0.07);
+}
+.victory-btn {
+  min-width: 160px;
+}
+
 /* ==== Narrow screens ==== */
 @media (max-width: 860px) {
   .log-panel {
@@ -927,9 +1028,67 @@ body {
   }
   .chat-box {
     width: 200px;
-    bottom: 96px;
+    bottom: 150px;
   }
   .chat-list {
     max-height: 110px;
   }
+}
+
+/* ==== Spectator / AFK banner ==== */
+.spectator-bar {
+  position: fixed;
+  left: calc(50% - 40px);
+  bottom: 100px;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-solid);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+.spectator-bar .btn {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+/* Red dot marking unread chat while the panel is collapsed */
+.chat-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff4b55;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* "AFK" badge on a player who timed out and is auto-folding */
+.afk-badge {
+  background: rgba(245, 194, 66, 0.18);
+  color: var(--gold);
+}
+
+/* "AI" marker under the seat when the seat is played by an AI */
+.ai-badge {
+  background: rgba(76, 154, 255, 0.18);
+  color: var(--blue);
+}
+
+/* Champion's parting words on the victory screen (bots only) */
+.victory-speech {
+  color: var(--gold);
+  font-size: 14px;
+  font-style: italic;
+  margin: 4px 0 14px;
+  line-height: 1.6;
+}
+
+/* Compact "Leave" button (table top bar + lobby) */
+.leave-btn {
+  font-size: 13px;
+  padding: 6px 14px;
 }

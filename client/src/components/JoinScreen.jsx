@@ -5,9 +5,10 @@ export default function JoinScreen({ notice, onCreate, onJoin }) {
   const [name, setName] = useState(() => localStorage.getItem('poker:name') || '')
   const [code, setCode] = useState(() => new URLSearchParams(location.search).get('r')?.toUpperCase() || '')
   const [rooms, setRooms] = useState([])
-  const [chips, setChips] = useState('1000')
+  const [chips, setChips] = useState('100')
   const [smallBlind, setSmallBlind] = useState('5')
   const [bigBlind, setBigBlind] = useState('10')
+  const [rebuys, setRebuys] = useState('0')
 
   useEffect(() => {
     let alive = true
@@ -36,6 +37,7 @@ export default function JoinScreen({ notice, onCreate, onJoin }) {
       startingChips: Number(chips) || undefined,
       smallBlind: Number(smallBlind) || undefined,
       bigBlind: Number(bigBlind) || undefined,
+      rebuys: Number(rebuys) || 0,
     })
   }
   const submitJoin = (e) => {
@@ -76,7 +78,7 @@ export default function JoinScreen({ notice, onCreate, onJoin }) {
           <div className="room-settings">
             <label>
               Starting chips
-              <input type="number" min="100" step="50" value={chips} onChange={(e) => setChips(e.target.value)} />
+              <input type="number" min="10" step="10" value={chips} onChange={(e) => setChips(e.target.value)} />
             </label>
             <label>
               Small blind
@@ -85,6 +87,10 @@ export default function JoinScreen({ notice, onCreate, onJoin }) {
             <label>
               Big blind
               <input type="number" min="2" value={bigBlind} onChange={(e) => setBigBlind(e.target.value)} />
+            </label>
+            <label>
+              Rebuys (0 = none)
+              <input type="number" min="0" max="10" value={rebuys} onChange={(e) => setRebuys(e.target.value)} />
             </label>
           </div>
           <div className="join-buttons">

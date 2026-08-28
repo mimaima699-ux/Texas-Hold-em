@@ -5,6 +5,8 @@ export const CONFIG = {
   ACTION_TIMEOUT_MS: 30000,
   // Shortened timeout when the acting player has disconnected (ms)
   OFFLINE_ACTION_TIMEOUT_MS: 8000,
+  // Turn window for a human in AFK mode — short, then auto-folds
+  AFK_TURN_MS: 5000,
   // AI thinking delay range (ms) for a more natural pace
   AI_ACT_MIN_MS: 500,
   AI_ACT_MAX_MS: 2000,
@@ -21,11 +23,13 @@ export const CONFIG = {
   // This is also the reveal window — players can choose to show their hand here.
   HAND_END_PAUSE_MS: 8000,
   // Default room settings
-  DEFAULT_STARTING_CHIPS: 1000,
+  DEFAULT_STARTING_CHIPS: 100,
   DEFAULT_SMALL_BLIND: 5,
   DEFAULT_BIG_BLIND: 10,
   MIN_PLAYERS: 2,
   MAX_PLAYERS: 9,
+  // Hard cap on rebuys a host may grant (chosen at create; room default is 0).
+  MAX_REBUYS: 10,
   // A lobby room that never starts a game is auto-closed after this long (ms).
   // Empty never-started rooms survive until this deadline (a page refresh
   // won't kill the invite link); rooms where a game has started close as

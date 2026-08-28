@@ -3,6 +3,7 @@ import { io } from 'socket.io-client'
 import JoinScreen from './components/JoinScreen.jsx'
 import RoomLobby from './components/RoomLobby.jsx'
 import GameTable from './components/GameTable.jsx'
+import VictoryScreen from './components/VictoryScreen.jsx'
 import { syncClock } from './lib.js'
 
 const SESSION_KEY = 'poker:session'
@@ -22,6 +23,9 @@ export default function App() {
   const [state, setState] = useState(null)
   const [connected, setConnected] = useState(false)
   const [notice, setNotice] = useState('')
+  // Id of the victory screen the player has already dismissed (per-game, so a
+  // new game's settlement shows again)
+  const [dismissedOverId, setDismissedOverId] = useState(null)
 
   const sessionRef = useRef(session)
   sessionRef.current = session
@@ -57,6 +61,8 @@ export default function App() {
       setState(s)
     })
     socket.on('room:closed', ({ reason } = {}) => clearSession(reason || 'Room closed'))
+    socket.on('room:kicked', ({ reason } = {}) => clearSession(reason || 'You were removed from the room'))
+    socket.on('room:left', ({ reason } = {}) => clearSession(reason || 'You left the game'))
     if (sessionRef.current) socket.connect()
     return () => {
       socket.off()
@@ -108,9 +114,19 @@ export default function App() {
     })
   }, [])
 
+  const kick = useCallback((targetId) => {
+    socket.emit('room:kick', { targetId }, (res) => {
+      if (res && !res.ok) setNotice(res.error)
+    })
+  }, [])
+
   const rebuy = useCallback(() => {
     socket.emit('game:rebuy', {}, (res) => {
-      if (res && !res.ok) setNotice(res.error)
+      if (res && !res.ok) {
+        setNotice(res.error)
+      } else if (res && res.remaining === 0) {
+        setNotice('Last rebuy — you are eliminated if you bust again')
+      }
     })
   }, [])
 
@@ -122,6 +138,30 @@ export default function App() {
 
   const sendChat = useCallback((text) => {
     socket.emit('chat:send', { text }, (res) => {
+      if (res && !res.ok) setNotice(res.error)
+    })
+  }, [])
+
+  const sit = useCallback(() => {
+    socket.emit('room:sit', {}, (res) => {
+      if (res && !res.ok) setNotice(res.error)
+    })
+  }, [])
+
+  const returnToGame = useCallback(() => {
+    socket.emit('game:return', {}, (res) => {
+      if (res && !res.ok) setNotice(res.error)
+    })
+  }, [])
+
+  const spectate = useCallback(() => {
+    socket.emit('room:spectate', {}, (res) => {
+      if (res && !res.ok) setNotice(res.error)
+    })
+  }, [])
+
+  const leave = useCallback(() => {
+    socket.emit('room:leave', {}, (res) => {
       if (res && !res.ok) setNotice(res.error)
     })
   }, [])
@@ -142,14 +182,42 @@ export default function App() {
   }
 
   const inGame = state.room.phase === 'playing' && state.game
+  const gameOver = state.room.gameOver ?? null
+  const showVictory = gameOver && gameOver.id !== dismissedOverId
 
   return (
     <>
       {inGame ? (
-        <GameTable state={state} onAction={act} onRebuy={rebuy} onReveal={reveal} onChat={sendChat} />
+        <GameTable state={state} onAction={act} onRebuy={rebuy} onReveal={reveal} onChat={sendChat} onLeave={leave} />
       ) : (
-        <RoomLobby state={state} onStart={startGame} onAddBot={addBot} onRebuy={rebuy} onChat={sendChat} />
+        <RoomLobby state={state} onStart={startGame} onAddBot={addBot} onRebuy={rebuy} onKick={kick} onChat={sendChat} onLeave={leave} onSpectate={spectate} />
       )}
+      {showVictory ? (
+        <VictoryScreen
+          gameOver={gameOver}
+          youId={state.room.youId}
+          onDismiss={() => setDismissedOverId(gameOver.id)}
+        />
+      ) : null}
+      {state.room.youSpectating ? (
+        <div className="spectator-bar">
+          <span>👀 Spectating</span>
+          {state.room.openSeats > 0 ? (
+            <button className="btn btn-primary" onClick={sit}>
+              Join game ({state.room.openSeats} seat{state.room.openSeats === 1 ? '' : 's'} open)
+            </button>
+          ) : (
+            <span className="action-hint">Room is full — waiting for a seat...</span>
+          )}
+        </div>
+      ) : state.game?.you?.afk ? (
+        <div className="spectator-bar">
+          <span>🤖 AFK — you've been away</span>
+          <button className="btn btn-primary" onClick={returnToGame}>
+            Back to game
+          </button>
+        </div>
+      ) : null}
       {notice ? <div className="toast">{notice}</div> : null}
       {!connected ? (
         <div className="overlay">

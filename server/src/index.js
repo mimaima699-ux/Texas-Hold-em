@@ -55,9 +55,9 @@ io.on('connection', (socket) => {
     return room
   }
 
-  socket.on('room:create', ({ name, startingChips, smallBlind, bigBlind } = {}, cb = () => {}) => {
+  socket.on('room:create', ({ name, startingChips, smallBlind, bigBlind, rebuys } = {}, cb = () => {}) => {
     room?.removeSocket(socket.id)
-    room = createRoom({ startingChips, smallBlind, bigBlind })
+    room = createRoom({ startingChips, smallBlind, bigBlind, rebuys })
     room.attach(io)
     cb({ ...room.join({ name, socketId: socket.id }), roomId: room.id })
   })
@@ -74,6 +74,11 @@ io.on('connection', (socket) => {
   socket.on('room:addBot', (_data, cb = () => {}) => {
     const r = needRoom(cb)
     if (r) cb(r.addBot(me()))
+  })
+
+  socket.on('room:kick', ({ targetId } = {}, cb = () => {}) => {
+    const r = needRoom(cb)
+    if (r) cb(r.kick(me(), targetId))
   })
 
   socket.on('game:start', (_data, cb = () => {}) => {
@@ -96,9 +101,37 @@ io.on('connection', (socket) => {
     if (r) cb(r.reveal(me()))
   })
 
+  socket.on('room:sit', (_data, cb = () => {}) => {
+    const r = needRoom(cb)
+    if (r) cb(r.sit(socket.id))
+  })
+
+  socket.on('room:spectate', (_data, cb = () => {}) => {
+    const r = needRoom(cb)
+    if (!r) return
+    const pid = r.sockets.get(socket.id)
+    if (pid == null) return cb({ ok: false, error: 'You are not seated' })
+    cb(r.becomeSpectator(pid, socket.id))
+  })
+
+  socket.on('game:return', (_data, cb = () => {}) => {
+    const r = needRoom(cb)
+    if (r) cb(r.returnToGame(me()))
+  })
+
+  socket.on('room:leave', (_data, cb = () => {}) => {
+    const r = needRoom(cb)
+    if (!r) return
+    const pid = r.sockets.get(socket.id)
+    if (pid == null) return cb({ ok: false, error: 'You are not seated' })
+    cb(r.leave(pid, socket.id))
+  })
+
   socket.on('chat:send', ({ text } = {}, cb = () => {}) => {
     const r = needRoom(cb)
-    if (r) cb(r.sendChat(me(), text))
+    if (!r) return
+    const pid = r.sockets.get(socket.id)
+    cb(pid != null ? r.sendChat(pid, text) : r.sendSpectatorChat(socket.id, text))
   })
 
   socket.on('disconnect', () => {
