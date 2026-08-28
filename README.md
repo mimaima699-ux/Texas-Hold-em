@@ -18,7 +18,7 @@ A real-time, browser-based **Texas Hold'em** poker game. Host a room, invite up 
 - **Improved AI** — Monte Carlo equity, board texture / draw awareness, and an
   AI benchmark harness (`scripts/ai-benchmark.mjs`)
 
-> 🔗 **Repository:** <https://github.com/mimaima699-ux/Texas-Hold-em>
+> 🎮 **Play now:** <https://texasholdem-mima.me/>
 
 ---
 
