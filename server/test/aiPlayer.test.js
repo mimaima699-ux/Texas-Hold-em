@@ -27,13 +27,16 @@ describe('boardWetness', () => {
 })
 
 describe('estimateRangePct', () => {
+  // Without a track record, the AI leans loose: a casual-game caller is
+  // modeled at 0.5 (any two reasonable cards) and an unknown raiser at 0.3,
+  // so we don't over-fold before we've actually read them.
   it('defaults to a loose caller range without data', () => {
-    expect(estimateRangePct(null)).toBeCloseTo(0.4, 5)
-    expect(estimateRangePct({})).toBeCloseTo(0.4, 5)
+    expect(estimateRangePct(null)).toBeCloseTo(0.5, 5)
+    expect(estimateRangePct({})).toBeCloseTo(0.5, 5)
   })
 
   it('credits an unknown raiser a tight range', () => {
-    expect(estimateRangePct({ preflopRaised: true })).toBeCloseTo(0.18, 5)
+    expect(estimateRangePct({ preflopRaised: true })).toBeCloseTo(0.3, 5)
   })
 
   it('treats a preflop raiser as tight (their PFR)', () => {

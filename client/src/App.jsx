@@ -89,9 +89,9 @@ export default function App() {
   )
 
   const joinRoom = useCallback(
-    (name, roomId) => {
+    (name, roomId, icon) => {
       socket.connect()
-      socket.emit('room:join', { roomId, name }, (res) => establish({ ...res, roomId: res?.ok ? roomId : undefined }, name))
+      socket.emit('room:join', { roomId, name, icon }, (res) => establish({ ...res, roomId: res?.ok ? roomId : undefined }, name))
     },
     [establish]
   )

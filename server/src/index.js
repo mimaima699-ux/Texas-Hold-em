@@ -55,20 +55,20 @@ io.on('connection', (socket) => {
     return room
   }
 
-  socket.on('room:create', ({ name, startingChips, smallBlind, bigBlind, rebuys } = {}, cb = () => {}) => {
+  socket.on('room:create', ({ name, startingChips, smallBlind, bigBlind, rebuys, lang, aiChat, icon } = {}, cb = () => {}) => {
     room?.removeSocket(socket.id)
-    room = createRoom({ startingChips, smallBlind, bigBlind, rebuys })
+    room = createRoom({ startingChips, smallBlind, bigBlind, rebuys, lang, aiChat })
     room.attach(io)
-    cb({ ...room.join({ name, socketId: socket.id }), roomId: room.id })
+    cb({ ...room.join({ name, icon, socketId: socket.id }), roomId: room.id })
   })
 
-  socket.on('room:join', ({ roomId, name, playerId } = {}, cb = () => {}) => {
+  socket.on('room:join', ({ roomId, name, playerId, icon } = {}, cb = () => {}) => {
     const target = getRoom(roomId)
     if (!target) return cb({ ok: false, error: 'Room not found' })
     room?.removeSocket(socket.id)
     room = target
     room.attach(io)
-    cb({ ...room.join({ name, playerId, socketId: socket.id }), roomId: target.id })
+    cb({ ...room.join({ name, playerId, icon, socketId: socket.id }), roomId: target.id })
   })
 
   socket.on('room:addBot', (_data, cb = () => {}) => {
@@ -128,10 +128,11 @@ io.on('connection', (socket) => {
   })
 
   socket.on('chat:send', ({ text } = {}, cb = () => {}) => {
-    const r = needRoom(cb)
+    const r = needRoom(typeof cb === 'function' ? cb : () => {})
     if (!r) return
     const pid = r.sockets.get(socket.id)
-    cb(pid != null ? r.sendChat(pid, text) : r.sendSpectatorChat(socket.id, text))
+    const ack = typeof cb === 'function' ? cb : () => {}
+    ack(pid != null ? r.sendChat(pid, text) : r.sendSpectatorChat(socket.id, text))
   })
 
   socket.on('disconnect', () => {

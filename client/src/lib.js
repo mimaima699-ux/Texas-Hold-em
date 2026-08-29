@@ -11,7 +11,7 @@ export function rankText(rank) {
   return String(RANK_LABEL[rank] ?? rank)
 }
 
-const AVATARS = ['🐺', '🦊', '🐼', '🦁', '🐸', '🦉', '🐵', '🐯', '🐰', '🦝', '🐨', '🐗', '🦔']
+export const AVATARS = ['🐺', '🦊', '🐼', '🦁', '🐸', '🦉', '🐵', '🐯', '🐰', '🦝', '🐨', '🐗', '🦔', '🐔', '🐱', '🐷']
 
 export function avatarFor(name) {
   let h = 0

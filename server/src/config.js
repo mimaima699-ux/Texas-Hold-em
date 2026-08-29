@@ -7,9 +7,11 @@ export const CONFIG = {
   OFFLINE_ACTION_TIMEOUT_MS: 8000,
   // Turn window for a human in AFK mode — short, then auto-folds
   AFK_TURN_MS: 5000,
-  // AI thinking delay range (ms) for a more natural pace
-  AI_ACT_MIN_MS: 500,
-  AI_ACT_MAX_MS: 2000,
+  // AI "thinking" delay before a bot acts. The LLM/heuristic itself is fast
+  // (~200ms / ~40ms), so this is purely cosmetic pacing — kept short so the
+  // table doesn't crawl when bots act many times per hand.
+  AI_ACT_MIN_MS: 150,
+  AI_ACT_MAX_MS: 450,
   // LLM-powered AI: any OpenAI-compatible endpoint. Endpoint unreachable
   // or unset → the heuristic AI (aiPlayer.js) is used automatically.
   // Local Ollama / vLLM / LM Studio / SiliconFlow / OpenRouter / DashScope all work.
@@ -21,7 +23,7 @@ export const CONFIG = {
   LLM_TURN_MS: Number(process.env.LLM_TURN_MS) || 14000,
   // Display time between end of a hand and the start of the next (ms).
   // This is also the reveal window — players can choose to show their hand here.
-  HAND_END_PAUSE_MS: 8000,
+  HAND_END_PAUSE_MS: 5000,
   // Default room settings
   DEFAULT_STARTING_CHIPS: 100,
   DEFAULT_SMALL_BLIND: 5,
@@ -38,4 +40,14 @@ export const CONFIG = {
   // Chat: per-player message cooldown (ms) and max length
   CHAT_COOLDOWN_MS: 400,
   CHAT_MAX_LEN: 120,
+  // AI banter: when a human sends a chat message, bots reply in their own
+  // voices (LLM-generated), and their replies can chain into a continuous
+  // conversation. Win/bust events also trigger relationship-driven reactions.
+  BANTER_DELAY_MIN_MS: 1000, // min "typing" delay before a bot replies
+  BANTER_DELAY_MAX_MS: 1000,
+  BANTER_BOT_COOLDOWN_MS: 1500, // a bot won't speak twice within this window
+  BANTER_CHAIN_PROB: 0.35, // chance a bot's line is replied to by another bot
+  BANTER_MAX_DEPTH: 3, // a single message → at most 3 replies in the chain
+  BANTER_DECAY: 0.4, // reply-probability decay per chain depth
+  BANTER_DEFAULT_LANG: 'zh', // event-banter language before any human chat
 }

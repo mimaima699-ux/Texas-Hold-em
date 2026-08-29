@@ -6,6 +6,10 @@ echo   Texas Hold'em - Start Online Game (Cloudflare Tunnel)
 echo ==================================================
 echo.
 
+echo Freeing port 3001 (killing any stale server)...
+powershell -Command "Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force }" >nul 2>&1
+timeout /t 1 /nobreak >nul
+
 echo [1/2] Starting game server (port 3001)...
 start "Poker Server" /D "%~dp0server" cmd /k "node src\index.js"
 

@@ -159,6 +159,41 @@ body {
   font-size: 15px;
   letter-spacing: 1px;
 }
+.avatar-picker {
+  text-align: left;
+}
+.avatar-picker-title {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.avatar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.avatar-choice {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: #0a1310;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
+}
+.avatar-choice:hover {
+  background: #13251c;
+  transform: scale(1.05);
+}
+.avatar-choice.selected {
+  border-color: #4ade80;
+  background: #173b28;
+  box-shadow: 0 0 0 1px #4ade80 inset;
+}
 .join-buttons {
   display: flex;
   gap: 10px;
@@ -168,7 +203,7 @@ body {
   flex: 1;
 }
 .settings-title {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   margin: 4px 0 6px;
   text-align: left;
@@ -199,6 +234,28 @@ body {
   font-size: 14px;
   width: 100%;
   min-width: 0;
+}
+.room-settings .checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  grid-column: span 2;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  background: #13251c;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.room-settings .checkbox-label input {
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  accent-color: #4ade80;
+}
+.room-settings .checkbox-label:hover {
+  border-color: #4ade80;
 }
 .room-list {
   margin-top: 20px;

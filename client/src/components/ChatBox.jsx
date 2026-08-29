@@ -8,6 +8,7 @@ export default function ChatBox({ chat = [], onSend, defaultOpen = false }) {
   const [text, setText] = useState('')
   const [unread, setUnread] = useState(false)
   const listRef = useRef(null)
+  const inputRef = useRef(null)
   const prevLen = useRef(chat.length)
 
   useEffect(() => {
@@ -53,7 +54,14 @@ export default function ChatBox({ chat = [], onSend, defaultOpen = false }) {
           </div>
           <div className="chat-emojis">
             {QUICK_EMOJIS.map((e) => (
-              <button key={e} onClick={() => send(e)} title="send">
+              <button
+                key={e}
+                onClick={() => {
+                  setText((prev) => prev + e)
+                  inputRef.current?.focus()
+                }}
+                title="insert"
+              >
                 {e}
               </button>
             ))}
@@ -66,6 +74,7 @@ export default function ChatBox({ chat = [], onSend, defaultOpen = false }) {
             }}
           >
             <input
+              ref={inputRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               maxLength={120}

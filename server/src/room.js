@@ -6,7 +6,8 @@
 import { randomUUID } from 'node:crypto'
 import { PokerGame } from './game/gameEngine.js'
 import { decide } from './ai/aiPlayer.js'
-import { llmDecide, llmEnabled } from './ai/llmPlayer.js'
+import { llmDecide, llmEnabled, generateBanter, banterEnabled } from './ai/llmPlayer.js'
+import { replyProb } from './ai/personas.js'
 import { cardLabel } from './game/deck.js'
 import { CONFIG } from './config.js'
 
@@ -26,33 +27,59 @@ const AI_ROSTER = [
 
 // AI chatter, keyed by the persona's icon. Winners boast after each hand; a bot
 // that just busted out sends its farewell (losers stay quiet); and the champion
-// of a whole game leaves a final word.
+// of a whole game leaves a final word. Win/bust lines have both a Chinese and an
+// English version, picked by the room's chat language; the champion declaration
+// is always English.
 const AI_WIN = {
-  '🥕': "I'm a genius, what can I say? 🤓",
-  '🦄': "Too easy, HAHA🤣",
-  '🐮': "Am I good or what? 👐",
-  '🐻': "Let's gooo! 😄",
-  '🌲': "Smart, I know. 😎",
-  '🍊': "Yesss～😋",
-  '🧠': "nb👊",
-  '🐟': "Who else?👏",
+  zh: {
+    '🥕': '我怕是个天才🤓',
+    '🦄': '实在是so easy🤣',
+    '🐮': '我怎么这么nb👐',
+    '🐻': '冲！😄',
+    '🌲': '我真聪明😎',
+    '🍊': '好耶～😋',
+    '🧠': 'nb👊',
+    '🐟': '还有谁？👏',
+  },
+  en: {
+    '🥕': "I'm a genius, what can I say? 🤓",
+    '🦄': "Too easy, HAHA🤣",
+    '🐮': "Am I good or what? 👐",
+    '🐻': "Let's gooo! 😄",
+    '🌲': "Smart, I know. 😎",
+    '🍊': "Yesss~ 😋",
+    '🧠': "let's go! 👊",
+    '🐟': "Who else? 👏",
+  },
 }
 const AI_BUST = {
-  '🥕': "Good guys always lose — so what's my excuse?",
-  '🦄': "Friendship is magic... but today the magic declared bankruptcy.",
-  '🐮': "I'd never believed in luck. Never had any cause to. And I was right.",
-  '🐻': "The highway goes on forever... but my chips ran out of gas.",
-  '🌲': "The answer is still 42. The question, apparently, was wrong.",
-  '🍊': "Rigged. The whole thing. Rigged.",
-  '🧠': "And Andy said, let there be... a break.",
-  '🐟': "The river folds. So do I. For good this time.",
+  zh: {
+    '🥕': '我准备好了！我准备好了！……我准备好输光所有了。',
+    '🦄': '友谊就是魔法……但今天魔法宣告破产了。',
+    '🐮': '我从不信运气。从没理由信。我果然没错。',
+    '🐻': '所有的路都通向某个地方。除了我走的这一条。',
+    '🌲': '看来，显然是问题本身就问错了。',
+    '🍊': '黑幕。全是黑幕。',
+    '🧠': '我算过了所有的可能。唯独漏掉了这一种。',
+    '🐟': '水流向低处，我流向沉默。',
+  },
+  en: {
+    '🥕': "Good guys always lose — so what's my excuse?",
+    '🦄': "Friendship is magic... but today the magic declared bankruptcy.",
+    '🐮': "I'd never believed in luck. Never had any cause to. And I was right.",
+    '🐻': "The highway goes on forever... but my chips ran out of gas.",
+    '🌲': "Apparently, the question itself was wrong.",
+    '🍊': "Rigged. The whole thing. Rigged.",
+    '🧠': "And Andy said, let there be... a break.",
+    '🐟': "The river folds. So do I. For good this time.",
+  },
 }
 const AI_CHAMPION = {
   '🥕': "Mima never cheats — she just out-lucks the universe.",
   '🦄': "The magic of friendship never folds — neither does Hazeshade.",
   '🐮': "Reacher said nothing.",
   '🐻': "Don't lose sight — the night is still young.",
-  '🌲': "The answer is 42.",
+  '🌲': "Smart. I know. 😎",
   '🍊': "Orange skies and river runs — tonight she is the sun.",
   '🧠': "And Andy said, let there be light.",
   '🐟': "Even the river knows when to go all in.",
@@ -60,7 +87,7 @@ const AI_CHAMPION = {
 
 // Human player avatars (mirrored on the client). Drawn so no two seated humans
 // share the same icon even when their names collide.
-const HUMAN_AVATARS = ['🐺', '🦊', '🐼', '🦁', '🐸', '🦉', '🐵', '🐯', '🐰', '🦝', '🐨', '🐗', '🦔']
+const HUMAN_AVATARS = ['🐺', '🦊', '🐼', '🦁', '🐸', '🦉', '🐵', '🐯', '🐰', '🦝', '🐨', '🐗', '🦔', '🐔', '🐱', '🐷']
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -92,6 +119,19 @@ export function getRoom(id) {
 }
 
 const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1))
+
+// Pick one item from a list of { bot, prob } weighted by prob. Used so a banter
+// reply goes to exactly one bot, chosen by relationship strength.
+const weightedPick = (candidates) => {
+  const total = candidates.reduce((s, c) => s + c.prob, 0)
+  if (total <= 0) return candidates[Math.floor(Math.random() * candidates.length)].bot
+  let roll = Math.random() * total
+  for (const c of candidates) {
+    roll -= c.prob
+    if (roll < 0) return c.bot
+  }
+  return candidates[candidates.length - 1].bot
+}
 
 // Coerce a value into an integer within [lo, hi], falling back when invalid
 const clampInt = (v, fallback, lo, hi) => {
@@ -127,6 +167,14 @@ export class Room {
     this.bigBlind = clampInt(options.bigBlind, CONFIG.DEFAULT_BIG_BLIND, 1, 200_000)
     if (this.bigBlind <= this.smallBlind) this.bigBlind = this.smallBlind * 2
     this.maxRebuys = clampInt(options.rebuys, 0, 0, CONFIG.MAX_REBUYS)
+    // Chat language: chosen by the host at room creation ('zh' | 'en'). All bot
+    // banter AND the win/bust preset lines follow it. The champion declaration
+    // stays English regardless.
+    this.chatLang = options.lang === 'en' ? 'en' : 'zh'
+    // Whether AI chat banter is on (host can turn it off at room creation). The
+    // preset win/bust/champion one-liners still fire; this only gates the
+    // LLM-generated conversational banter. Default ON.
+    this.aiChat = options.aiChat !== false
 
     // Auto-close this room if no game starts within the lobby expiry window
     this.lobbyExpireTimer = setTimeout(() => this.expireLobby(), CONFIG.ROOM_LOBBY_EXPIRE_MS)
@@ -259,7 +307,7 @@ export class Room {
 
   // ==== Player management ====
 
-  join({ name, playerId, socketId }) {
+  join({ name, playerId, socketId, icon }) {
     const displayName = String(name || 'Player').slice(0, 12)
 
     // Reconnect: player still seated
@@ -300,7 +348,8 @@ export class Room {
       seat,
       name: displayName,
       isBot: false,
-      icon: this.pickAvatar(),
+      // Use the human's chosen avatar if it's a valid one, else auto-pick
+      icon: HUMAN_AVATARS.includes(icon) ? icon : this.pickAvatar(),
       chips: this.startingChips,
       socketId,
       wins: 0,
@@ -571,6 +620,9 @@ export class Room {
     this.chat.push({ id: `${now}-${Math.random().toString(36).slice(2, 7)}`, name: p.name, text: clean, t: now })
     if (this.chat.length > 50) this.chat.splice(0, this.chat.length - 50)
     this.broadcast()
+    // A human just spoke → bots reply (100%: every human message gets a reply),
+    // chaining into a continuous conversation in the room's chosen language.
+    this.triggerBanter({ id: p.id, name: p.name, icon: p.icon, isBot: false }, clean, { lang: this.chatLang, depth: 0 })
     return { ok: true }
   }
 
@@ -588,7 +640,153 @@ export class Room {
     if (!clean) return { ok: false, error: 'Empty message' }
     this.pushChat(spec.name, clean)
     this.broadcast()
+    // Spectators are real humans too → their messages trigger bot banter
+    this.triggerBanter({ id: spec.id, name: spec.name, icon: null, isBot: false }, clean, { lang: this.chatLang, depth: 0 })
     return { ok: true }
+  }
+
+  // ==== AI banter ====
+  //
+  // Two trigger sources:
+  //   1. A human (or spectator) sends a chat message → exactly ONE bot replies;
+  //      that bot's line may then trigger one further reply, forming a single
+  //      coherent thread (each reply follows on from the previous speaker), with
+  //      reply probability decaying by depth.
+  //   2. A bot wins or busts at hand end → its relationship partners react
+  //      (e.g. 42↔Jeremiah, Mima↔Hazeshade). Preset one-liners (AI_WIN/AI_BUST)
+  //      are pushed directly and are NOT reply-triggered; AI_CHAMPION is always
+  //      English.
+  //
+  // Inter-bot reply probabilities come from the relationship matrix
+  // (personas.js replyProb): couples/confidants high, sworn enemies 0, etc.
+
+  // Build a compact, bot's-eye game context for the banter prompt: the
+  // community, the pot, and the bot's chip stack. The bot's OWN hole cards are
+  // withheld while a hand is in progress — otherwise the bot leaks them in chat
+  // (e.g. "我这 A♦ J♥ ..."), which is a poker rule violation. They are only
+  // revealed to the prompt once the hand is over (phase === 'handEnd'), since
+  // at that point the cards are public anyway. We NEVER expose another player's
+  // hole cards. Returns null when no hand is in progress.
+  banterGameContext(botId) {
+    if (!this.engine || this.phase !== 'playing') return null
+    const ep = this.engine.playerById(botId)
+    if (!ep) return null
+    const handOver = this.engine.phase === 'handEnd'
+    return {
+      phase: this.engine.phase,
+      community: this.engine.community.map(cardLabel).join(' ') || null,
+      yourHand: handOver ? (ep.hole.map(cardLabel).join(' ') || null) : null,
+      pot: this.engine.potForDisplay(),
+      yourChips: ep.chips,
+    }
+  }
+
+  // Trigger a single banter reply to `speaker` (human or bot) who said `text`.
+  // `lang` is the room's chat language, propagated through the chain. `depth` is
+  // the chain depth; reply probability decays with depth. `event` flags a
+  // win/bust reaction rather than a chat reply. At most one bot replies per call,
+  // so the conversation is a single coherent thread.
+  //
+  // Rules:
+  //   - A HUMAN message is ALWAYS replied to (100%), by one bot chosen uniformly
+  //     at random (no relationship weighting). @-mentioning a bot overrides this:
+  //     that bot replies 100%, alone.
+  //   - A BOT's line (a reply, or its win/bust reaction) is replied to with 50%
+  //     probability; the responder is chosen weighted by the relationship matrix
+  //     (replyProb). Chain depth is capped.
+  triggerBanter(speaker, text, { lang, depth = 0, event = null }) {
+    if (!this.aiChat || !banterEnabled()) return
+    if (depth >= CONFIG.BANTER_MAX_DEPTH) return
+    const bots = this.seatedPlayers().filter((p) => p.isBot && p.id !== speaker.id)
+    if (!bots.length) return
+
+    const norm = (s) => String(s).replace(/\s+/g, '').toLowerCase().replace(/jr\.?$/, '')
+    const normalized = norm(text || '')
+
+    // A human @-mentioning a bot by name → that bot answers 100%, alone.
+    if (!speaker.isBot) {
+      const mentioned = bots.find((b) => {
+        const name = norm(b.name)
+        return name.length >= 2 && normalized.includes(name)
+      })
+      if (mentioned) {
+        this.scheduleBanter(mentioned, speaker, text, { lang, depth, event, addressed: true })
+        return
+      }
+    }
+
+    let responder = null
+    if (!speaker.isBot) {
+      // Human message (no @-mention): 100% chance one bot replies, chosen
+      // uniformly at random. Skip bots on cooldown if possible.
+      const pool = bots.filter((b) => Date.now() - (b.lastBanterAt || 0) > CONFIG.BANTER_BOT_COOLDOWN_MS)
+      const choice = pool.length ? pool : bots
+      responder = choice[Math.floor(Math.random() * choice.length)]
+    } else {
+      // Bot spoke → 50% chance another bot replies, chosen weighted by
+      // relationship probability (depth decay applies).
+      if (Math.random() >= CONFIG.BANTER_CHAIN_PROB) return
+      const decay = Math.pow(CONFIG.BANTER_DECAY, depth)
+      const candidates = []
+      for (const bot of bots) {
+        if (Date.now() - (bot.lastBanterAt || 0) < CONFIG.BANTER_BOT_COOLDOWN_MS) continue
+        const prob = replyProb(speaker.icon, bot.icon) * decay
+        if (prob > 0) candidates.push({ bot, prob })
+      }
+      if (candidates.length) responder = weightedPick(candidates)
+    }
+
+    if (responder) this.scheduleBanter(responder, speaker, text, { lang, depth, event })
+  }
+
+  // A bot won / busted → its relationship partners react (LLM banter). Only bot
+  // subjects trigger this (relationships are between AIs). Uses the room's
+  // chosen chat language.
+  triggerEventBanter(subject, type) {
+    if (!subject || !subject.isBot) return
+    this.triggerBanter(
+      { id: subject.id, name: subject.name, icon: subject.icon, isBot: true },
+      null,
+      { lang: this.chatLang, depth: 0, event: { type, subjectName: subject.name } }
+    )
+  }
+
+  // Schedule one bot to (after a typing delay) generate and post a banter line,
+  // then continue the chain from its own line. `addressed` means the speaker
+  // @-mentioned this bot by name — the reply must directly answer the message.
+  scheduleBanter(bot, speaker, text, { lang, depth, event, addressed = false }) {
+    const delay = randInt(CONFIG.BANTER_DELAY_MIN_MS, CONFIG.BANTER_DELAY_MAX_MS)
+    const roomId = this.id
+    const botId = bot.id
+    const botIcon = bot.icon
+    const speakerName = speaker.name
+    setTimeout(() => {
+      const room = rooms.get(roomId)
+      if (!room || room !== this) return
+      const seatP = room.playerById(botId)
+      if (!seatP || !seatP.isBot) return
+      const game = room.banterGameContext(botId)
+      generateBanter({ botIcon, speakerName, speakerText: text, game, lang, event, addressed })
+        .then((line) => {
+          if (!line) return
+          const r = rooms.get(roomId)
+          if (!r || r !== this) return
+          const b = r.playerById(botId)
+          if (!b || !b.isBot) return
+          b.lastBanterAt = Date.now()
+          r.pushChat(b.name, line)
+          r.broadcast()
+          // Continue the thread — UNLESS this was a direct @-address: when someone
+          // @-names a bot, only that bot replies (the chain stops, no piggybacking).
+          if (!addressed) {
+            r.triggerBanter({ id: b.id, name: b.name, icon: b.icon, isBot: true }, line, {
+              lang,
+              depth: depth + 1,
+            })
+          }
+        })
+        .catch(() => {})
+    }, delay)
   }
 
   // A spectator takes a free seat and joins the game (once a seat is open).
@@ -836,13 +1034,33 @@ export class Room {
       const icon = seatP?.icon
       if (!icon) continue
       if (winners.has(ep.id)) {
-        const line = AI_WIN[icon]
+        const line = AI_WIN[this.chatLang]?.[icon]
         if (line) this.pushChat(ep.name, line)
       } else if (ep.chips === 0) {
-        const line = AI_BUST[icon]
+        const line = AI_BUST[this.chatLang]?.[icon]
         if (line) this.pushChat(ep.name, line)
       }
     }
+    // Relationship-driven event reactions: ONE bot partner reacts to the hand's
+    // outcome (e.g. 42↔Jeremiah, Mima↔Hazeshade). Only the first bot winner/bust
+    // subject triggers a single banter chain (one AI replies, then the chain may
+    // continue — but no parallel chains per hand end). Preset one-liners above
+    // are NOT reply-triggered.
+    let eventSubject = null
+    let eventType = null
+    for (const w of result.winners || []) {
+      const seatP = this.seats.find((s) => s && s.id === w.id)
+      if (seatP?.isBot) { eventSubject = seatP; eventType = 'win'; break }
+    }
+    if (!eventSubject) {
+      for (const ep of this.engine.players) {
+        if (ep.isBot && ep.chips === 0) {
+          const seatP = this.seats[ep.seat]
+          if (seatP) { eventSubject = seatP; eventType = 'bust'; break }
+        }
+      }
+    }
+    if (eventSubject) this.triggerEventBanter(eventSubject, eventType)
     this.broadcast()
     // Show the result for a while, then start the next hand
     this.handTimer = setTimeout(() => {
