@@ -9,6 +9,12 @@ A real-time, browser-based **Texas Hold'em** poker game. Host a room, invite up 
 - **Two AI tiers** — a medium-strategy heuristic AI *and* an optional
   LLM-powered AI (Ollama, vLLM, LM Studio, SiliconFlow, OpenRouter, DashScope)
   that falls back to the heuristic AI when the endpoint is unavailable
+- **AI chat banter** — LLM-driven bots banter in eight distinct personas,
+  driven by a relationship matrix (couples, confidants, sworn enemies, a secret
+  crush). They react to chat and to win/bust events. The host can toggle it off
+- **Room language** — pick 中文 or English; bots stay in that language
+- **Player avatars** — choose your own emoji avatar when creating or joining a
+  room
 - **Real-time multiplayer** — Socket.IO pushes, auto-reconnect, action countdowns,
   and lobby rooms that can be shared via a code or link
 - **Victory screen** — when a game ends, a settlement overlay crowns the champion
@@ -74,7 +80,9 @@ server/src/
     aiPlayer.js         Heuristic AI (preflop by strength & position, postflop
                         by pot odds)
     llmPlayer.js        Optional LLM AI (OpenAI-compatible endpoints, graceful
-                        fallback to heuristic AI)
+                        fallback to heuristic AI); chat banter + language handling
+    personas.js         Per-bot chat voices (few-shot examples) and the inter-bot
+                        relationship matrix
 client/src/
   App.jsx               Connection & room session management (localStorage,
                         auto-reconnect)
@@ -94,8 +102,8 @@ scripts/
 
 | Event (C→S)     | Payload                                              | Description |
 |-----------------|------------------------------------------------------|-------------|
-| `room:create`   | `{ name, startingChips?, smallBlind?, bigBlind? }`   | Create and join a room |
-| `room:join`     | `{ roomId, name, playerId? }`                        | Join a room (`playerId` = reconnect) |
+| `room:create`   | `{ name, icon, startingChips?, smallBlind?, bigBlind?, rebuys?, lang?, aiChat? }` | Create and join a room |
+| `room:join`     | `{ roomId, name, icon, playerId? }`                  | Join a room (`playerId` = reconnect) |
 | `room:addBot`   | —                                                    | Host adds an AI player |
 | `room:kick`     | `{ targetId }`                                        | Host removes a player from the room |
 | `game:start`    | —                                                    | Host starts a game (resets every seat to the starting stack) |
