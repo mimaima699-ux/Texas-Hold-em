@@ -877,18 +877,25 @@ body {
   color: var(--muted);
 }
 .chat-emojis {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 .chat-emojis button {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.06);
   border: none;
   border-radius: 6px;
-  font-size: 16px;
-  padding: 3px 6px;
+  font-size: 15px;
+  padding: 0;
+  line-height: 1;
   cursor: pointer;
-  line-height: 1.2;
+  overflow: hidden;
 }
 .chat-emojis button:hover {
   background: rgba(245, 194, 66, 0.2);
