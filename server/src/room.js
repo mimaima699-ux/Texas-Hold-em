@@ -546,8 +546,9 @@ export class Room {
       // In a running game: an AI takes over the seat
       this.takeOverByBot(p)
       if (wasHost) this.transferHost()
-      this.addLog(`${name} left — an AI took over the seat`)
-      this.pushChat('System', `${name} has left — an AI is now playing their seat.`)
+      const en = this.chatLang === 'en'
+      this.addLog(en ? `${name} left — an AI took over the seat` : `${name} 离开了 — AI 接管了座位`)
+      this.pushChat('System', en ? `${name} has left — an AI is now playing their seat.` : `${name} 离开了 — 现在由 AI 接管这个座位。`)
     } else {
       // Lobby (or between games): just free the seat, no takeover
       this.seats[p.seat] = null
